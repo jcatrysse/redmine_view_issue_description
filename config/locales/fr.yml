@@ -2,4 +2,5 @@ fr:
   permission_view_activities: Voir les activités
   permission_view_activities_global: Voir les activités globales
   permission_view_issue_description: Vue de la description de la demande
+  permission_view_watched_issues: Voir les demandes suivies
   project_module_issue_description: Description des demandes

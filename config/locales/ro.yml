@@ -2,4 +2,5 @@ ro:
   permission_view_activities: Vizualizați activitățile
   permission_view_activities_global: Vizualizați activitățile globale
   permission_view_issue_description: Vizualizare descriere tichet
+  permission_view_watched_issues: Vizualizați tichetele urmărite
   project_module_issue_description: Descriere tichet

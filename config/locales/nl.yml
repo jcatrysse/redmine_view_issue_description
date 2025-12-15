@@ -3,4 +3,5 @@ nl:
   permission_view_activities: Bekijk activiteiten
   permission_view_activities_global: Bekijk globale activiteiten
   permission_view_issue_description: Bekijk issue beschrijving
+  permission_view_watched_issues: Bekijk issues waar je watcher op bent
   project_module_issue_description: Issue beschrijving

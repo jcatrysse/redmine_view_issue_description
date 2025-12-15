@@ -2,7 +2,7 @@ Redmine::Plugin.register :redmine_view_issue_description do
   name 'Redmine View Issue Description plugin'
   author 'Jan Catrysse'
   description 'Redmine plugin to add permissions to view issue description and the activity tabs'
-  version '0.1.2'
+  version '0.1.3'
   url 'https://github.com/redminetrustteam/redmine_view_issue_description'
   author_url 'https://github.com/redminetrustteam'
 
@@ -10,6 +10,7 @@ Redmine::Plugin.register :redmine_view_issue_description do
 
   project_module :issue_tracking do
     permission :view_issue_description, {}
+    permission :view_watched_issues, {}
   end
 
   permission :view_activities, {:custom_activities => [:index]}
@@ -31,8 +32,11 @@ Redmine::Plugin.register :redmine_view_issue_description do
     menu.push :activity, { :controller => 'activities', :action => 'index' }, after: :overview, :if => Proc.new {  |p| User.current.allowed_to?(:view_activities, p)  }
   end
 
+  require 'deface'
+
   require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/issue_patch'
   require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/query_patch'
   require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/issues_controller_patch'
   require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/activities_controller_patch'
+  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/overrides/role_form_override'
 end

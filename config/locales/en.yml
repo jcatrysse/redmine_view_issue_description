@@ -1,6 +1,7 @@
 # English strings go here for Rails i18n
 en:
   permission_view_issue_description: "View of issue description"
+  permission_view_watched_issues: View watched issues
   permission_view_activities_global: "View global activities"
   permission_view_activities: "View activities"
   project_module_issue_description: "Issue description"
