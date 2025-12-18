@@ -1,0 +1,72 @@
+<%= principals_check_box_tags('watcher[user_ids][]', users) %>
+
+<% if @watcher_paginator %>
+  <% current_page = @watcher_paginator.page.to_i %>
+  <% page_count =
+       if @watcher_paginator.respond_to?(:page_count)
+         @watcher_paginator.page_count.to_i
+       else
+         ((@watcher_paginator.item_count.to_i - 1) / @watcher_paginator.per_page.to_i) + 1
+       end
+  %>
+
+  <% visible_pages = [1, 2, page_count - 1, page_count,
+                      current_page - 2, current_page - 1, current_page,
+                      current_page + 1, current_page + 2]
+    .select { |p| p > 0 && p <= page_count }
+    .uniq
+    .sort
+  %>
+
+  <% pages = [] %>
+  <% visible_pages.each do |p| %>
+    <% pages << nil if pages.any? && p > pages.last + 1 %>
+    <% pages << p %>
+  <% end %>
+
+  <span class="pagination watchers-pagination">
+    <ul class="pages">
+      <% if @watcher_paginator.previous_page %>
+        <li class="previous page">
+          <%= link_to "« #{l(:label_previous)}",
+                      watcher_pagination_link_params(page: @watcher_paginator.previous_page),
+                      accesskey: 'p' %>
+        </li>
+      <% else %>
+        <li class="previous"><span>« <%= l(:label_previous) %></span></li>
+      <% end %>
+
+      <% pages.each do |p| %>
+        <% if p.nil? %>
+          <li class="spacer"><span>…</span></li>
+        <% elsif p == current_page %>
+          <li class="current"><span><%= p %></span></li>
+        <% else %>
+          <li class="page">
+            <%= link_to p,
+                        watcher_pagination_link_params(page: p) %>
+          </li>
+        <% end %>
+      <% end %>
+
+      <% if @watcher_paginator.next_page %>
+        <li class="next page">
+          <%= link_to "#{l(:label_next)} »",
+                      watcher_pagination_link_params(page: @watcher_paginator.next_page),
+                      accesskey: 'n' %>
+        </li>
+      <% else %>
+        <li class="next"><span><%= l(:label_next) %> »</span></li>
+      <% end %>
+    </ul>
+  </span>
+<% end %>
+
+<%= javascript_tag <<~JS
+$(document).off('click', '#users_for_watcher .watchers-pagination a');
+$(document).on('click', '#users_for_watcher .watchers-pagination a', function(event) {
+event.preventDefault();
+$('#users_for_watcher').load(this.href);
+});
+JS
+%>

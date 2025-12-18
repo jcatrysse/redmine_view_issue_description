@@ -1,0 +1,13 @@
+/* Redmine-like pagination, scoped to watcher autocomplete fragment */
+#ajax-modal #users_for_watcher .pagination a,
+#ajax-modal #users_for_watcher .pagination span {
+    display: inline-block;
+    padding: 2px 6px;
+    margin-right: 2px;
+    line-height: 1.6;
+    border-radius: 2px;
+}
+
+#ajax-modal #users_for_watcher .pagination span.current {
+    font-weight: bold;
+}

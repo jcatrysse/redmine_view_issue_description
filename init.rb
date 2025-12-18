@@ -34,9 +34,12 @@ Redmine::Plugin.register :redmine_view_issue_description do
 
   require 'deface'
 
-  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/issue_patch'
-  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/query_patch'
-  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/issues_controller_patch'
-  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/patches/activities_controller_patch'
-  require File.dirname(__FILE__) + '/lib/redmine_view_issue_description/overrides/role_form_override'
+  require_relative 'lib/redmine_view_issue_description/hooks'
+  require_relative 'lib/redmine_view_issue_description/patches/issue_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/query_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/issues_controller_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/watchers_controller_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/activities_controller_patch'
+  require_relative 'lib/redmine_view_issue_description/overrides/role_form_override'
+  require_relative 'lib/redmine_view_issue_description/overrides/watchers_pagination_override'
 end
