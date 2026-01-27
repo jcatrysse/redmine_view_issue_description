@@ -8,8 +8,31 @@ unless Kernel.respond_to?(:require_dependency)
 end
 
 class ::WatchersController
+  def self.helper_method(*); end
+
   def users_for_new_watcher
     []
+  end
+end
+
+redmine_root = File.expand_path('../../../../../../', __dir__)
+redmine_lib = File.join(redmine_root, 'lib')
+$LOAD_PATH.unshift(redmine_lib) if Dir.exist?(redmine_lib) && !$LOAD_PATH.include?(redmine_lib)
+
+unless defined?(ActionController::Base)
+  module ActionController
+    class Base; end
+  end
+end
+
+if defined?(Redmine) && Redmine.respond_to?(:autoload?) && Redmine.autoload?(:I18n)
+  Redmine.send(:remove_const, :I18n)
+end
+
+unless defined?(Redmine::I18n)
+  module Redmine
+    module I18n
+    end
   end
 end
 
@@ -189,6 +212,45 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
 
       expect(result).not_to include(blocked_user)
       expect(result).to match_array(allowed_users)
+    end
+
+    it 'caps the page size to 100 to avoid oversized queries' do
+      controller = WatchersController.new
+      users = build_users(150)
+      controller.project = Project.new(users)
+      controller.watchables = [Watchable.new]
+      controller.params[:per_page] = 200
+
+      result = controller.send(:users_for_new_watcher)
+
+      expect(result.size).to eq(100)
+    end
+
+    it 'defaults to the first page when the page number is invalid' do
+      controller = WatchersController.new
+      users = build_users(30)
+      controller.project = Project.new(users)
+      controller.watchables = [Watchable.new]
+      controller.params[:page] = 0
+      controller.params[:per_page] = 10
+
+      result = controller.send(:users_for_new_watcher)
+
+      expect(result.map(&:name)).to eq(users.sort_by(&:name).first(10).map(&:name))
+    end
+
+    it 'uses the principal scope when searching across multiple projects' do
+      controller = WatchersController.new
+      users = build_users(12)
+      Principal.assignable_scope = FakeScope.new(users)
+      controller.projects = [Project.new(users), Project.new(users)]
+      controller.watchables = []
+
+      result = controller.send(:users_for_new_watcher)
+
+      expect(result.map(&:name)).to eq(users.sort_by(&:name).first(25).map(&:name))
+    ensure
+      Principal.assignable_scope = nil
     end
   end
 end
