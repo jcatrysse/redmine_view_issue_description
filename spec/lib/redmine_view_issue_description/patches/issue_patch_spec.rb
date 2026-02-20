@@ -65,11 +65,12 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
     end
 
     class ::Role
-      attr_reader :all_tracker_permissions, :tracker_permissions
+      attr_reader :all_tracker_permissions, :tracker_permissions, :issues_visibility
 
-      def initialize(all_tracker_permissions: [], tracker_permissions: {})
+      def initialize(all_tracker_permissions: [], tracker_permissions: {}, issues_visibility: 'all')
         @all_tracker_permissions = all_tracker_permissions
         @tracker_permissions = tracker_permissions
+        @issues_visibility = issues_visibility
       end
 
       def permissions_all_trackers?(permission)
@@ -82,15 +83,21 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
     end
 
     class ::Issue
-      attr_accessor :project, :tracker, :assigned_to, :watchers_list, :base_visible, :addable_candidates
+      attr_accessor :project, :tracker, :assigned_to, :author, :private_flag, :watchers_list, :base_visible, :addable_candidates
 
-      def initialize(project:, tracker:, assigned_to: nil, watchers: [], base_visible: true, addable_candidates: [])
+      def initialize(project:, tracker:, assigned_to: nil, author: nil, private_flag: false, watchers: [], base_visible: true, addable_candidates: [])
         @project = project
         @tracker = tracker
         @assigned_to = assigned_to
+        @author = author
+        @private_flag = private_flag
         @watchers_list = watchers
         @base_visible = base_visible
         @addable_candidates = addable_candidates
+      end
+
+      def is_private?
+        private_flag
       end
 
       def watcher_principals
@@ -197,7 +204,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, watchers: [user], base_visible: false)
 
-      expect(issue.visible?(user)).to be(false)
+      expect(issue.visible?(user)).to be(true)
     end
 
     it 'allows watcher visibility when the permission is set for the tracker only' do
@@ -208,7 +215,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, watchers: [user], base_visible: false)
 
-      expect(issue.visible?(user)).to be(false)
+      expect(issue.visible?(user)).to be(true)
     end
 
     it 'allows watcher visibility when both view permissions are granted' do
@@ -236,7 +243,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       expect(issue.visible?(user)).to be(false)
     end
 
-    it 'requires view_issue_description permission even for watchers' do
+    it 'allows watcher visibility without view_issue_description permission' do
       role = Role.new(tracker_permissions: { view_watched_issues: [tracker.id] })
       user = User.new(
         permissions: { [:view_watched_issues, project] => true },
@@ -244,7 +251,28 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, watchers: [user], base_visible: false)
 
-      expect(issue.visible?(user)).to be(false)
+      expect(issue.visible?(user)).to be(true)
+    end
+
+    it 'allows watcher visibility independent of own-only issues visibility constraints' do
+      own_description_role = Role.new(
+        tracker_permissions: { view_issue_description: [tracker.id] },
+        issues_visibility: 'own'
+      )
+      watcher_role = Role.new(
+        tracker_permissions: { view_watched_issues: [tracker.id] },
+        issues_visibility: 'all'
+      )
+      user = User.new(
+        permissions: {
+          [:view_issue_description, project] => true,
+          [:view_watched_issues, project] => true
+        },
+        project_roles: { project => [own_description_role, watcher_role] }
+      )
+      issue = Issue.new(project: project, tracker: tracker, author: User.new, private_flag: true, watchers: [user], base_visible: false)
+
+      expect(issue.visible?(user)).to be(true)
     end
 
     it 'denies viewing the description without the view_issue_description permission' do
@@ -288,6 +316,49 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       issue = Issue.new(project: project, tracker: tracker)
 
       expect(issue.visible?(user)).to be(true)
+    end
+
+    it 'does not leak description visibility from all-issues role when description role is own-only' do
+      own_description_role = Role.new(
+        tracker_permissions: { view_issue_description: [tracker.id] },
+        issues_visibility: 'own'
+      )
+      all_issues_role = Role.new(issues_visibility: 'all')
+      user = User.new(
+        project_roles: { project => [own_description_role, all_issues_role] },
+        permissions: { [:view_issue_description, project] => true }
+      )
+      issue = Issue.new(project: project, tracker: tracker, author: User.new)
+
+      expect(issue.visible?(user)).to be(false)
+    end
+
+    it 'allows description visibility for own issue with own-only description role' do
+      own_description_role = Role.new(
+        tracker_permissions: { view_issue_description: [tracker.id] },
+        issues_visibility: 'own'
+      )
+      user = User.new(
+        project_roles: { project => [own_description_role] },
+        permissions: { [:view_issue_description, project] => true }
+      )
+      issue = Issue.new(project: project, tracker: tracker, author: user)
+
+      expect(issue.visible?(user)).to be(true)
+    end
+
+    it 'denies private issue descriptions for default-visibility role' do
+      default_description_role = Role.new(
+        tracker_permissions: { view_issue_description: [tracker.id] },
+        issues_visibility: 'default'
+      )
+      user = User.new(
+        project_roles: { project => [default_description_role] },
+        permissions: { [:view_issue_description, project] => true }
+      )
+      issue = Issue.new(project: project, tracker: tracker, private_flag: true)
+
+      expect(issue.visible?(user)).to be(false)
     end
   end
 

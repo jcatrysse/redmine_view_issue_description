@@ -15,6 +15,38 @@ module RedmineViewIssueDescription
           roles.any? { |role| role.permissions_tracker_ids?(permission, tracker.id) }
         end
 
+        def role_allows_issue_visibility?(role, user)
+          visibility = role.respond_to?(:issues_visibility) ? role.issues_visibility.to_s : 'all'
+
+          case visibility
+          when 'all', ''
+            true
+          when 'default'
+            !respond_to?(:is_private?) || !is_private?
+          when 'own'
+            respond_to?(:author) && user.is_or_belongs_to?(author)
+          when 'assigned'
+            user.is_or_belongs_to?(assigned_to)
+          else
+            false
+          end
+        end
+
+        def description_access_granted?(user, project_roles = nil)
+          return false unless user
+          return false unless user.allowed_to?(:view_issue_description, project)
+
+          roles = project_roles || user.roles_for_project(project)
+
+          roles.any? do |role|
+            next false unless role_allows_issue_visibility?(role, user)
+            next true if role.permissions_all_trackers?(:view_issue_description)
+            next false unless tracker
+
+            role.permissions_tracker_ids?(:view_issue_description, tracker.id)
+          end
+        end
+
         def watcher_access_granted?(user, project_roles = nil)
           return false unless user && user.logged?
           return false unless tracker_permission_granted?(user, :view_watched_issues, project_roles)
@@ -66,15 +98,14 @@ module RedmineViewIssueDescription
           return true if user&.admin?
           return true if user.is_or_belongs_to?(assigned_to)
 
-          description_allowed = tracker_permission_granted?(user, :view_issue_description, project_roles)
+          description_allowed = description_access_granted?(user, project_roles)
           watcher_allowed = watcher_access_granted?(user, project_roles)
           base_visible = visible_without_vid?(user)
 
+          return true if watcher_allowed
           return false unless description_allowed
 
-          return true if watcher_allowed || base_visible
-
-          false
+          base_visible
         end
 
         end
