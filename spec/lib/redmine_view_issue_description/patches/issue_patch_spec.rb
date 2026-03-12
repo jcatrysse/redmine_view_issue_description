@@ -275,9 +275,16 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       expect(issue.visible?(user)).to be(true)
     end
 
-    it 'denies viewing the description without the view_issue_description permission' do
+    it 'allows seeing the issue with only view_issues permission (description gate moved to controller)' do
       user = User.new(project_roles: { project => [Role.new] }, permissions: { [:view_issues, project] => true })
-      issue = Issue.new(project: project, tracker: tracker)
+      issue = Issue.new(project: project, tracker: tracker, base_visible: true)
+
+      expect(issue.visible?(user)).to be(true)
+    end
+
+    it 'hides the issue when base visibility also denies access' do
+      user = User.new(project_roles: { project => [Role.new] }, permissions: {})
+      issue = Issue.new(project: project, tracker: tracker, base_visible: false)
 
       expect(issue.visible?(user)).to be(false)
     end
@@ -318,7 +325,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       expect(issue.visible?(user)).to be(true)
     end
 
-    it 'does not leak description visibility from all-issues role when description role is own-only' do
+    it 'does not leak description access from all-issues role when description role is own-only' do
       own_description_role = Role.new(
         tracker_permissions: { view_issue_description: [tracker.id] },
         issues_visibility: 'own'
@@ -330,10 +337,10 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, author: User.new)
 
-      expect(issue.visible?(user)).to be(false)
+      expect(issue.description_access_granted?(user)).to be(false)
     end
 
-    it 'allows description visibility for own issue with own-only description role' do
+    it 'grants description access for own issue with own-only description role' do
       own_description_role = Role.new(
         tracker_permissions: { view_issue_description: [tracker.id] },
         issues_visibility: 'own'
@@ -344,10 +351,10 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, author: user)
 
-      expect(issue.visible?(user)).to be(true)
+      expect(issue.description_access_granted?(user)).to be(true)
     end
 
-    it 'denies private issue descriptions for default-visibility role' do
+    it 'denies description access for private issues with default-visibility role' do
       default_description_role = Role.new(
         tracker_permissions: { view_issue_description: [tracker.id] },
         issues_visibility: 'default'
@@ -358,7 +365,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       )
       issue = Issue.new(project: project, tracker: tracker, private_flag: true)
 
-      expect(issue.visible?(user)).to be(false)
+      expect(issue.description_access_granted?(user)).to be(false)
     end
   end
 

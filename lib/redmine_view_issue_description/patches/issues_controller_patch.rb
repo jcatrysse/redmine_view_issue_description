@@ -3,6 +3,15 @@ module RedmineViewIssueDescription
     module IssuesControllerPatch
       module InstanceMethods
         def show_with_vid
+          user = User.current
+          unless user.admin? ||
+                 user.is_or_belongs_to?(@issue.assigned_to) ||
+                 @issue.watcher_access_granted?(user) ||
+                 @issue.description_access_granted?(user)
+            render_403
+            return
+          end
+
           show_without_vid
           if api_request? && (include_changesets_new? || (Redmine::Plugin.installed?('redmine_contacts_helpdesk') && @issue.respond_to?(:helpdesk_ticket) && @issue.helpdesk_ticket))
             Rails.logger.error("Rendering custom API: redmine_view_issue_description => issues/redmine_view_issue_description/show.api")

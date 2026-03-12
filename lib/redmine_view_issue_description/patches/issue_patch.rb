@@ -97,15 +97,9 @@ module RedmineViewIssueDescription
 
           return true if user&.admin?
           return true if user.is_or_belongs_to?(assigned_to)
+          return true if watcher_access_granted?(user, project_roles)
 
-          description_allowed = description_access_granted?(user, project_roles)
-          watcher_allowed = watcher_access_granted?(user, project_roles)
-          base_visible = visible_without_vid?(user)
-
-          return true if watcher_allowed
-          return false unless description_allowed
-
-          base_visible
+          visible_without_vid?(user)
         end
 
         end

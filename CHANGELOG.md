@@ -1,5 +1,8 @@
 # CHANGELOG
 
+### 0.1.5
+* Fixed issue with `view_issues` permission, not showing relations.
+
 ### 0.1.4
 * Fixed mixed-role authorization leak where `view_issue_description` could be combined across roles to expose descriptions outside the role's `issues_visibility` scope.
 * Restored watcher-based visibility exception so `view_watched_issues` can make watched issues visible independent of base issues visibility constraints.
