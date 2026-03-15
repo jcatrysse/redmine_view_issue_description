@@ -8,6 +8,6 @@
     border-radius: 2px;
 }
 
-#ajax-modal #users_for_watcher .pagination span.current {
+#ajax-modal #users_for_watcher .pagination li.current span {
     font-weight: bold;
 }

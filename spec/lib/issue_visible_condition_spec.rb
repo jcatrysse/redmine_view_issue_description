@@ -62,6 +62,10 @@ RSpec.describe 'Issue.visible_condition patch' do
         @id = id
       end
 
+      def self.pluck(_column)
+        Array(tracker_ids)
+      end
+
       def self.all
         Array(tracker_ids).map { |id| new(id: id) }
       end
@@ -181,5 +185,20 @@ RSpec.describe 'Issue.visible_condition patch' do
     user = User.new(id: 21, memberships: [membership])
 
     expect(Issue.visible_condition(user)).to eq('base_condition')
+  end
+
+  # Regression test: group watchers must also be covered by the SQL condition.
+  it 'extends the condition to include issues watched via group membership' do
+    project = double('Project', id: 4)
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    membership = Member.new(project: project, roles: [role])
+    Project.project_ids = [project.id]
+    user = User.new(id: 22, memberships: [membership])
+
+    condition = Issue.visible_condition(user)
+
+    expect(condition).to include('groups_users gu')
+    expect(condition).to include('gu.user_id = 22')
+    expect(condition).to include('issues.project_id = 4')
   end
 end

@@ -1,6 +1,6 @@
 require_relative '../../../spec_helper'
 
-unless defined?(RedmineViewIssueDescription)
+unless defined?(RedmineViewIssueDescription::Patches::IssuePatch)
   module RedmineViewIssueDescription
     module Patches
       module IssuePatch
@@ -47,8 +47,12 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
         logged
       end
 
-      def allowed_to?(permission, project)
-        permissions[[permission, project]] || false
+      def allowed_to?(permission, project, global: false, **_opts)
+        if global
+          permissions.any? { |(perm, _proj), granted| perm == permission && granted }
+        else
+          permissions[[permission, project]] || false
+        end
       end
 
       def active?
@@ -104,7 +108,6 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
         watchers_list
       end
 
-
       def visible?(user = nil)
         base_visible
       end
@@ -129,6 +132,22 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
   let(:tracker) { double('Tracker', id: 1) }
   let(:other_tracker) { double('Tracker', id: 2) }
   let(:all_tracker_watch_role) { Role.new(all_tracker_permissions: [:view_watched_issues]) }
+
+  describe '#tracker_permission_granted?' do
+    it 'grants access to admin even without role permissions (M2 regression)' do
+      admin = User.new(admin: true, project_roles: {})
+      issue = Issue.new(project: project, tracker: tracker)
+
+      expect(issue.tracker_permission_granted?(admin, :view_watched_issues)).to be(true)
+    end
+
+    it 'denies access to non-admin without the permission' do
+      user = User.new(project_roles: { project => [Role.new] }, permissions: {})
+      issue = Issue.new(project: project, tracker: tracker)
+
+      expect(issue.tracker_permission_granted?(user, :view_watched_issues)).to be(false)
+    end
+  end
 
   describe '#watcher_access_granted?' do
     it 'denies access when no user is provided' do
@@ -296,11 +315,26 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       expect(issue.visible?(user)).to be(false)
     end
 
-    it 'allows access for users assigned to the issue' do
+    it 'delegates assignee visibility to Redmine core (base visible)' do
       assignee = User.new
       issue = Issue.new(project: project, tracker: tracker, assigned_to: assignee)
 
+      # Plugin does not override assignee visibility at model level; core visible? (base_visible=true) grants it.
       expect(issue.visible?(assignee)).to be(true)
+    end
+
+    it 'does not crash and returns false when called with a nil user' do
+      issue = Issue.new(project: project, tracker: tracker, base_visible: false)
+
+      expect { issue.visible?(nil) }.not_to raise_error
+      expect(issue.visible?(nil)).to be(false)
+    end
+
+    it 'does not crash when assigned_to is nil' do
+      user = User.new
+      issue = Issue.new(project: project, tracker: tracker, assigned_to: nil, base_visible: false)
+
+      expect { issue.visible?(user) }.not_to raise_error
     end
 
     it 'respects role permissions for viewing descriptions' do
@@ -324,7 +358,10 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
 
       expect(issue.visible?(user)).to be(true)
     end
+  end
 
+  describe '#description_access_granted?' do
+    # Regression test for M9: cross-role escalation must not grant access.
     it 'does not leak description access from all-issues role when description role is own-only' do
       own_description_role = Role.new(
         tracker_permissions: { view_issue_description: [tracker.id] },
@@ -367,22 +404,46 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
 
       expect(issue.description_access_granted?(user)).to be(false)
     end
+
+    it 'denies description access for any unrecognised issues_visibility value' do
+      unknown_role = Role.new(
+        tracker_permissions: { view_issue_description: [tracker.id] },
+        issues_visibility: 'assigned'
+      )
+      assignee = User.new(
+        project_roles: { project => [unknown_role] },
+        permissions: { [:view_issue_description, project] => true }
+      )
+      issue = Issue.new(project: project, tracker: tracker, assigned_to: assignee)
+
+      expect(issue.description_access_granted?(assignee)).to be(false)
+    end
   end
 
   describe '#addable_watcher_users_with_vid' do
     let(:project_users) { [] }
-    let(:project) { double('Project', users: project_users) }
+    let(:project) { double('Project', users: project_users, members: []) }
 
-    it 'returns base candidates when there are no additional users with permission' do
-      base_user = User.new
+    it 'returns base candidates that have the watcher permission' do
+      base_user = User.new(
+        project_roles: { project => [all_tracker_watch_role] },
+        permissions: { [:view_watched_issues, project] => true }
+      )
       issue = Issue.new(project: project, tracker: tracker, addable_candidates: [base_user])
 
       expect(issue.addable_watcher_users(User.new)).to contain_exactly(base_user)
     end
 
+    it 'filters base candidates that lack view_watched_issues' do
+      unpermitted_user = User.new(project_roles: { project => [Role.new] }, permissions: {})
+      issue = Issue.new(project: project, tracker: tracker, addable_candidates: [unpermitted_user])
+
+      expect(issue.addable_watcher_users(User.new)).to be_empty
+    end
+
     it 'adds project members that have the watcher permission for all trackers' do
       candidate = User.new(project_roles: { project => [all_tracker_watch_role] }, permissions: { [:view_watched_issues, project] => true })
-      base_user = User.new
+      base_user = User.new(project_roles: { project => [all_tracker_watch_role] }, permissions: { [:view_watched_issues, project] => true })
       project_users << candidate
       issue = Issue.new(project: project, tracker: tracker, addable_candidates: [base_user])
 
@@ -400,10 +461,10 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
     end
 
     it 'includes candidates only when their tracker permission matches the issue tracker' do
-      allowed_role = Role.new(tracker_permissions: { view_watched_issues: [tracker.id] })
+      allowed_role    = Role.new(tracker_permissions: { view_watched_issues: [tracker.id] })
       disallowed_role = Role.new(tracker_permissions: { view_watched_issues: [other_tracker.id] })
 
-      allowed_candidate = User.new(project_roles: { project => [allowed_role] }, permissions: { [:view_watched_issues, project] => true })
+      allowed_candidate    = User.new(project_roles: { project => [allowed_role] },    permissions: { [:view_watched_issues, project] => true })
       disallowed_candidate = User.new(project_roles: { project => [disallowed_role] }, permissions: { [:view_watched_issues, project] => true })
       project_users.concat([allowed_candidate, disallowed_candidate])
 
@@ -434,6 +495,21 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
       issue = Issue.new(project: project, tracker: tracker)
 
       expect(issue.valid_watcher?(user)).to be(false)
+    end
+
+    it 'denies watcher when user lacks view_watched_issues (no core fallthrough)' do
+      user = User.new(project_roles: { project => [Role.new] }, permissions: {})
+      issue = Issue.new(project: project, tracker: tracker)
+
+      # view_watched_issues is the only gate; core is not consulted for User principals.
+      expect(issue.valid_watcher?(user)).to be(false)
+    end
+
+    it 'allows admin as valid watcher even without view_watched_issues (M2 regression)' do
+      admin = User.new(admin: true, project_roles: {})
+      issue = Issue.new(project: project, tracker: tracker)
+
+      expect(issue.valid_watcher?(admin)).to be(true)
     end
   end
 end

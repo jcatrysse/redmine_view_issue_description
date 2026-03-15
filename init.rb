@@ -2,7 +2,7 @@ Redmine::Plugin.register :redmine_view_issue_description do
   name 'Redmine View Issue Description plugin'
   author 'Jan Catrysse'
   description 'Redmine plugin to add permissions to view issue description and the activity tabs'
-  version '0.1.5'
+  version '0.2.0'
   url 'https://github.com/redminetrustteam/redmine_view_issue_description'
   author_url 'https://github.com/redminetrustteam'
 
@@ -11,10 +11,10 @@ Redmine::Plugin.register :redmine_view_issue_description do
   project_module :issue_tracking do
     permission :view_issue_description, {}
     permission :view_watched_issues, {}
+    permission :view_activities, {}
   end
 
-  permission :view_activities, {:custom_activities => [:index]}
-  permission :view_activities_global, {:custom_activities_global => [:index]}
+  permission :view_activities_global, {}
 
   Redmine::MenuManager.map :application_menu do |menu|
     menu.delete :activity
@@ -44,4 +44,19 @@ Rails.application.config.after_initialize do
   require_relative 'lib/redmine_view_issue_description/patches/activities_controller_patch'
   require_relative 'lib/redmine_view_issue_description/overrides/role_form_override'
   require_relative 'lib/redmine_view_issue_description/overrides/watchers_pagination_override'
+
+  # Validate Deface selector targets still exist in the Redmine source.
+  # If Redmine restructures its views, the overrides silently produce no match
+  # and the tracker-permission checkboxes disappear from the role form.
+  form_path = File.join(Rails.root, 'app', 'views', 'roles', '_form.html.erb')
+  if File.exist?(form_path)
+    content = File.read(form_path)
+    unless content.include?('permissions = [:view_issues,')
+      Rails.logger.warn(
+        '[redmine_view_issue_description] Deface selector may not match: ' \
+        'expected "permissions = [:view_issues," in roles/_form.html.erb. ' \
+        'Tracker permission checkboxes may not appear on the role form.'
+      )
+    end
+  end
 end

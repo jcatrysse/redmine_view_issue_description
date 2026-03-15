@@ -9,6 +9,7 @@ end
 
 class ::WatchersController
   def self.helper_method(*); end
+  def self.before_action(*); end
 
   def users_for_new_watcher
     []
@@ -32,6 +33,38 @@ end
 unless defined?(Redmine::I18n)
   module Redmine
     module I18n
+    end
+  end
+end
+
+# Prevent LoadError when the patch does `require 'redmine/pagination'` outside Redmine
+$LOADED_FEATURES << 'redmine/pagination' unless $LOADED_FEATURES.include?('redmine/pagination')
+
+unless defined?(Redmine::Pagination)
+  module Redmine
+    module Pagination
+      class Paginator
+        attr_reader :per_page, :item_count, :page
+
+        def initialize(count, per_page, page)
+          @item_count = count.to_i
+          @per_page   = per_page.to_i
+          @page       = [page.to_i, 1].max
+        end
+
+        def page_count
+          return 1 if @per_page.zero?
+          ((@item_count - 1) / @per_page) + 1
+        end
+
+        def previous_page
+          @page > 1 ? @page - 1 : nil
+        end
+
+        def next_page
+          @page < page_count ? @page + 1 : nil
+        end
+      end
     end
   end
 end
@@ -116,9 +149,13 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
     end
 
     class ::Project
-      attr_reader :principals
+      attr_reader :principals, :id
+
+      @@_vid_next_id = 0
 
       def initialize(users)
+        @@_vid_next_id += 1
+        @id = @@_vid_next_id
         @principals = FakeScope.new(users)
       end
     end
@@ -158,6 +195,245 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
 
   def build_users(count)
     Array.new(count) { |index| User.new(name: format('User %03d', index), login: "user#{index}") }
+  end
+
+  # ── check_self_watch_permission ──────────────────────────────────────────────
+
+  describe '#check_self_watch_permission' do
+    before(:all) do
+      ::WatchersController.class_eval do
+        def render_403
+          @_vid_403_called = true
+        end
+
+        def vid_403_called?
+          @_vid_403_called == true
+        end
+      end
+
+      # Add User.current class accessor and id instance method if absent.
+      unless ::User.respond_to?(:current=)
+        ::User.class_eval do
+          class << self
+            attr_accessor :current
+          end
+        end
+      end
+
+      unless ::User.method_defined?(:id)
+        ::User.class_eval do
+          def id
+            @name.hash.abs
+          end
+        end
+      end
+
+      unless ::User.method_defined?(:admin?)
+        ::User.class_eval do
+          def admin?
+            @admin == true
+          end
+
+          def is_or_belongs_to?(principal)
+            principal.equal?(self)
+          end
+        end
+      end
+
+      # Add Issue.where lookup used by resolve_issues_from_params.
+      # Uses a class-level instance variable registry so each example can register
+      # fake issues by id without triggering Ruby 3.x toplevel @@ warnings.
+      unless defined?(::Issue)
+        class ::Issue; end
+      end
+      unless ::Issue.respond_to?(:where)
+        ::Issue.instance_variable_set(:@_ctrl_spec_store, {})
+
+        ::Issue.define_singleton_method(:register_for_ctrl_spec) do |id, issue|
+          @_ctrl_spec_store[id] = issue
+        end
+
+        ::Issue.define_singleton_method(:clear_ctrl_spec_registry) do
+          @_ctrl_spec_store.clear
+        end
+
+        ::Issue.define_singleton_method(:where) do |conditions = {}|
+          ids = Array(conditions[:id])
+          store = @_ctrl_spec_store
+          found = ids.map { |i| store[i] }.compact
+          Struct.new(:items) { def to_a; items; end }.new(found)
+        end
+      end
+    end
+
+    after { ::Issue.clear_ctrl_spec_registry if ::Issue.respond_to?(:clear_ctrl_spec_registry) }
+
+    let(:current_user) { User.new(name: 'Current User') }
+
+    before { allow(User).to receive(:current).and_return(current_user) }
+
+    # ── Stubbing resolve_watchable_issues lets us test check_self_watch_permission
+    # in isolation, independent of how Issues are resolved from params. ──────
+
+    it 'renders 403 when user lacks description access on the Issue' do
+      blocking_issue = double('Issue', assigned_to: nil)
+      allow(blocking_issue).to receive(:description_access_granted?)
+        .with(current_user).and_return(false)
+
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([blocking_issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).to be(true)
+    end
+
+    it 'does not render 403 when the user has description access on the Issue' do
+      allowing_issue = double('Issue', assigned_to: nil)
+      allow(allowing_issue).to receive(:description_access_granted?)
+        .with(current_user).and_return(true)
+
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([allowing_issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+
+    it 'does not render 403 when the user is the assignee' do
+      issue = double('Issue', assigned_to: current_user)
+      # description_access_granted? not needed — assignee short-circuits
+
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+
+    it 'does not render 403 when the user is admin (M2 regression)' do
+      admin_user = User.new(name: 'Admin User')
+      admin_user.instance_variable_set(:@admin, true)
+      allow(User).to receive(:current).and_return(admin_user)
+
+      blocking_issue = double('Issue', assigned_to: nil)
+      allow(blocking_issue).to receive(:description_access_granted?)
+        .with(admin_user).and_return(false)
+
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([blocking_issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+
+    # M1 regression: a user who holds view_watched_issues but lacks
+    # view_issue_description must NOT be able to self-watch.
+    it 'renders 403 when user has view_watched_issues but no description access (M1 regression)' do
+      escalation_issue = double('Issue', assigned_to: nil)
+      allow(escalation_issue).to receive(:description_access_granted?)
+        .with(current_user).and_return(false)
+
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([escalation_issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).to be(true)
+    end
+
+    it 'does not render 403 when a manager adds a different user (current user not in requested ids)' do
+      blocking_issue = double('Issue', assigned_to: nil)
+      allow(blocking_issue).to receive(:description_access_granted?).and_return(false)
+
+      ctrl = WatchersController.new
+      ctrl.params[:user_id] = '9999'  # some other user — not current_user.id
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([blocking_issue])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+
+    it 'does not render 403 when there are no watchable Issues to check' do
+      ctrl = WatchersController.new
+      allow(ctrl).to receive(:resolve_watchable_issues).and_return([])
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+
+    # ── regression: watch action sets @watchables in the action body, not via
+    # a before_action.  resolve_watchable_issues must fall through to params. ──
+
+    it 'resolves the blocking Issue from params when @watchables is not yet set (watch action path)' do
+      issue = double('Issue', assigned_to: nil)
+      allow(issue).to receive(:is_a?).with(Issue).and_return(true)
+      allow(issue).to receive(:description_access_granted?)
+        .with(current_user).and_return(false)
+      Issue.register_for_ctrl_spec(801, issue)
+
+      ctrl = WatchersController.new  # @watchables = [] (empty, not yet populated)
+      ctrl.params = { object_type: 'Issue', object_ids: [801] }
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).to be(true)
+    end
+
+    it 'allows the watch when Issue is resolved from params and user has description access' do
+      issue = double('Issue', assigned_to: nil)
+      allow(issue).to receive(:is_a?).with(Issue).and_return(true)
+      allow(issue).to receive(:description_access_granted?)
+        .with(current_user).and_return(true)
+      Issue.register_for_ctrl_spec(802, issue)
+
+      ctrl = WatchersController.new
+      ctrl.params = { object_type: 'Issue', object_ids: [802] }
+
+      ctrl.send(:check_self_watch_permission)
+
+      expect(ctrl.vid_403_called?).not_to be(true)
+    end
+  end
+
+  # ── resolve_issues_from_params ────────────────────────────────────────────
+
+  describe '#resolve_issues_from_params (via resolve_watchable_issues)' do
+    it 'returns empty when object_type is not Issue' do
+      ctrl = WatchersController.new
+      ctrl.params = { object_type: 'WikiPage', object_ids: [1] }
+
+      result = ctrl.send(:resolve_watchable_issues)
+
+      expect(result).to be_empty
+    end
+
+    it 'returns empty when no object IDs are provided' do
+      ctrl = WatchersController.new
+      ctrl.params = { object_type: 'Issue' }
+
+      result = ctrl.send(:resolve_watchable_issues)
+
+      expect(result).to be_empty
+    end
+
+    it 'supports the singular object_id param variant' do
+      issue = double('Issue')
+      allow(issue).to receive(:is_a?).with(Issue).and_return(true)
+      Issue.register_for_ctrl_spec(803, issue)
+
+      ctrl = WatchersController.new
+      ctrl.params = { object_type: 'Issue', object_id: '803' }
+
+      result = ctrl.send(:resolve_watchable_issues)
+
+      expect(result).to include(issue)
+    end
   end
 
   describe '#users_for_new_watcher_with_vid' do
@@ -237,6 +513,66 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
       result = controller.send(:users_for_new_watcher)
 
       expect(result.map(&:name)).to eq(users.sort_by(&:name).first(10).map(&:name))
+    end
+
+    it 'reports correct total count after valid_watcher? filtering (prevents broken pagination)' do
+      controller = WatchersController.new
+      allowed_users = build_users(10)
+      restricted_user = User.new(name: 'Zzz Restricted', login: 'restricted')
+      # Only 10 of 11 users pass valid_watcher? (allowed_users list is explicit)
+      watchable = Watchable.new(allowed_users: allowed_users)
+      controller.project = Project.new(allowed_users + [restricted_user])
+      controller.watchables = [watchable]
+      controller.params[:per_page] = 5
+
+      result = controller.send(:users_for_new_watcher)
+
+      expect(result.size).to eq(5)
+      expect(controller.instance_variable_get(:@watcher_total_count)).to eq(10)
+    end
+
+    it 'scopes to single project when @projects has one entry and @project is nil' do
+      controller = WatchersController.new
+      users = build_users(5)
+      project = Project.new(users)
+      # @project is nil, but @projects has one entry
+      controller.projects = [project]
+      controller.watchables = [Watchable.new]
+
+      result = controller.send(:users_for_new_watcher)
+
+      expect(result.map(&:name)).to eq(users.sort_by(&:name).map(&:name))
+    end
+
+    it 'preserves object_ids in pagination link params for bulk-watcher flows' do
+      controller = WatchersController.new
+      controller.params = {
+        object_type: 'Issue',
+        object_ids: ['10', '20', '30'],
+        project_id: '1',
+        per_page: '10',
+        q: 'john'
+      }
+
+      result = controller.send(:watcher_pagination_link_params, page: 2)
+
+      expect(result[:'object_ids[]']).to eq(['10', '20', '30'])
+      expect(result[:object_type]).to eq('Issue')
+      expect(result[:page]).to eq(2)
+    end
+
+    it 'omits object_ids from pagination link params when not present' do
+      controller = WatchersController.new
+      controller.params = {
+        object_type: 'Issue',
+        object_id: '10',
+        project_id: '1'
+      }
+
+      result = controller.send(:watcher_pagination_link_params, page: 2)
+
+      expect(result).not_to have_key(:'object_ids[]')
+      expect(result[:object_id]).to eq('10')
     end
 
     it 'uses the principal scope when searching across multiple projects' do
