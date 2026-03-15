@@ -6,7 +6,8 @@
        if @watcher_paginator.respond_to?(:page_count)
          @watcher_paginator.page_count.to_i
        else
-         ((@watcher_paginator.item_count.to_i - 1) / @watcher_paginator.per_page.to_i) + 1
+         per = @watcher_paginator.per_page.to_i
+         per > 0 ? ((@watcher_paginator.item_count.to_i - 1) / per) + 1 : 1
        end
   %>
 
@@ -63,8 +64,8 @@
 <% end %>
 
 <%= javascript_tag <<~JS
-$(document).off('click', '#users_for_watcher .watchers-pagination a');
-$(document).on('click', '#users_for_watcher .watchers-pagination a', function(event) {
+$(document).off('click.vid_watchers', '#users_for_watcher .watchers-pagination a');
+$(document).on('click.vid_watchers', '#users_for_watcher .watchers-pagination a', function(event) {
 event.preventDefault();
 $('#users_for_watcher').load(this.href);
 });

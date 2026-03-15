@@ -2,7 +2,7 @@ Redmine::Plugin.register :redmine_view_issue_description do
   name 'Redmine View Issue Description plugin'
   author 'Jan Catrysse'
   description 'Redmine plugin to add permissions to view issue description and the activity tabs'
-  version '0.1.5'
+  version '0.2.0'
   url 'https://github.com/redminetrustteam/redmine_view_issue_description'
   author_url 'https://github.com/redminetrustteam'
 
@@ -11,10 +11,10 @@ Redmine::Plugin.register :redmine_view_issue_description do
   project_module :issue_tracking do
     permission :view_issue_description, {}
     permission :view_watched_issues, {}
+    permission :view_activities, {}
   end
 
-  permission :view_activities, {:custom_activities => [:index]}
-  permission :view_activities_global, {:custom_activities_global => [:index]}
+  permission :view_activities_global, {}
 
   Redmine::MenuManager.map :application_menu do |menu|
     menu.delete :activity

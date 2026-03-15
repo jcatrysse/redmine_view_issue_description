@@ -54,13 +54,15 @@ api.issue do
     end
   end if include_in_api_response?('changesets')
 
-  api.array :changesets do
+  api.array :changesets_new do
     @changesets.each do |changeset|
       api.changeset :revision => changeset.revision do
         api.user(:id => changeset.user_id, :name => changeset.user.name) unless changeset.user.nil?
         api.comments changeset.comments
         api.committed_on changeset.committed_on
-        api.repository changeset.repository
+        unless changeset.repository.nil?
+          api.repository(:id => changeset.repository.id, :identifier => changeset.repository.identifier.to_s, :name => changeset.repository.name.to_s)
+        end
       end
     end
   end if include_in_api_response?('changesets_new')
@@ -89,56 +91,59 @@ api.issue do
       api.user :id => user.id, :name => user.name
     end
   end if include_in_api_response?('watchers') && User.current.allowed_to?(:view_issue_watchers, @issue.project)
-end
 
-api.helpdesk_ticket do
-  api.id @issue.helpdesk_ticket.issue.id
-  api.from_address @issue.helpdesk_ticket.from_address
-  api.to_address @issue.helpdesk_ticket.to_address || ''
-  api.cc_address @issue.helpdesk_ticket.cc_address
-  api.message_id @issue.helpdesk_ticket.message_id
-  api.ticket_date format_date(@issue.helpdesk_ticket.ticket_date)
-  api.content @issue.helpdesk_ticket.issue.description
-  api.source @issue.helpdesk_ticket.ticket_source_name
-  api.is_incoming @issue.helpdesk_ticket.is_incoming
-  api.reaction_time @issue.helpdesk_ticket.reaction_time || ''
-  api.first_response_time @issue.helpdesk_ticket.first_response_time || ''
-  api.resolve_time @issue.helpdesk_ticket.resolve_time || ''
-  api.last_agent_response_at format_date(@issue.helpdesk_ticket.last_agent_response_at) || ''
-  api.last_customer_response_at format_date(@issue.helpdesk_ticket.last_customer_response_at) || ''
-  api.contact(id: @issue.helpdesk_ticket.contact_id, name: @issue.helpdesk_ticket.customer.name) if @issue.helpdesk_ticket.customer.present?
-  api.vote @issue.helpdesk_ticket.vote
-  api.vote_comment @issue.helpdesk_ticket.vote_comment
-  api.message_file do
-    render_api_attachment(@issue.helpdesk_ticket.message_file,api)
-  end if @issue.helpdesk_ticket.message_file.present?
-  api.array :journal_messages do
-    @issue.helpdesk_ticket.issue.journal_messages.each do |journal_message|
-      api.journal_message do
-        api.contact(id: journal_message.contact_id, name: journal_message.contact.name) if journal_message.contact.present?
-        api.from_address journal_message.from_address
-        api.to_address journal_message.to_address
-        api.cc_address journal_message.cc_address
-        api.bcc_address journal_message.bcc_address
-        api.message_date format_date(journal_message.message_date)
-        api.is_incoming journal_message.is_incoming
-        api.content journal_message.content
-        api.message_id journal_message.message_id
-        api.journal_id journal_message.journal_id
-        api.viewed_on journal_message.viewed_on
-        api.message_file do
-          render_api_attachment(journal_message.message_file,api)
-        end if journal_message.message_file.present?
-      end
+  if @issue.respond_to?(:helpdesk_ticket) && @issue.helpdesk_ticket &&
+       (User.current.admin? || @issue.description_access_granted?(User.current))
+    api.helpdesk_ticket do
+      api.id @issue.helpdesk_ticket.issue.id
+      api.from_address @issue.helpdesk_ticket.from_address
+      api.to_address @issue.helpdesk_ticket.to_address || ''
+      api.cc_address @issue.helpdesk_ticket.cc_address
+      api.message_id @issue.helpdesk_ticket.message_id
+      api.ticket_date format_date(@issue.helpdesk_ticket.ticket_date)
+      api.content @issue.helpdesk_ticket.issue.description
+      api.source @issue.helpdesk_ticket.ticket_source_name
+      api.is_incoming @issue.helpdesk_ticket.is_incoming
+      api.reaction_time @issue.helpdesk_ticket.reaction_time || ''
+      api.first_response_time @issue.helpdesk_ticket.first_response_time || ''
+      api.resolve_time @issue.helpdesk_ticket.resolve_time || ''
+      api.last_agent_response_at format_date(@issue.helpdesk_ticket.last_agent_response_at) || ''
+      api.last_customer_response_at format_date(@issue.helpdesk_ticket.last_customer_response_at) || ''
+      api.contact(id: @issue.helpdesk_ticket.contact_id, name: @issue.helpdesk_ticket.customer.name) if @issue.helpdesk_ticket.customer.present?
+      api.vote @issue.helpdesk_ticket.vote
+      api.vote_comment @issue.helpdesk_ticket.vote_comment
+      api.message_file do
+        render_api_attachment(@issue.helpdesk_ticket.message_file, api)
+      end if @issue.helpdesk_ticket.message_file.present?
+      api.array :journal_messages do
+        @issue.helpdesk_ticket.issue.journal_messages.each do |journal_message|
+          api.journal_message do
+            api.contact(id: journal_message.contact_id, name: journal_message.contact.name) if journal_message.contact.present?
+            api.from_address journal_message.from_address
+            api.to_address journal_message.to_address
+            api.cc_address journal_message.cc_address
+            api.bcc_address journal_message.bcc_address
+            api.message_date format_date(journal_message.message_date)
+            api.is_incoming journal_message.is_incoming
+            api.content journal_message.content
+            api.message_id journal_message.message_id
+            api.journal_id journal_message.journal_id
+            api.viewed_on journal_message.viewed_on
+            api.message_file do
+              render_api_attachment(journal_message.message_file, api)
+            end if journal_message.message_file.present?
+          end
+        end
+      end if include_in_api_response?('journal_messages')
+      api.array :journals do
+        @issue.helpdesk_ticket.journals.each do |journal|
+          api.journal do
+            api.id journal.id
+            api.notes journal.notes
+            api.created_on journal.created_on
+          end
+        end
+      end if include_in_api_response?('journals')
     end
-  end if include_in_api_response?('journal_messages')
-  api.array :journals do
-    @issue.helpdesk_ticket.journals.each do |journal|
-      api.journal do
-        api.id journal.id
-        api.notes journal.notes
-        api.created_on journal.created_on
-      end
-    end
-  end if include_in_api_response?('journals')
-end if @issue.respond_to?(:helpdesk_ticket) && @issue.helpdesk_ticket
+  end
+end
