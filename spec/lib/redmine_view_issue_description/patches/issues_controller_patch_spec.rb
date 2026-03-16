@@ -20,6 +20,8 @@ unless defined?(IssuesController)
     def self.method_defined?(m)
       super
     end
+
+    def self.after_action(*); end
   end
 end
 
@@ -263,6 +265,81 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuesControllerPatch::Inst
       controller.params = { include: 'journals' }
 
       expect(controller.send(:include_journal_messages?)).to be(false)
+    end
+  end
+
+  # ── vid_helpdesk_access? ─────────────────────────────────────────────────
+
+  describe '#vid_helpdesk_access?' do
+    it 'returns false when issue does not respond to helpdesk_ticket' do
+      issue = make_issue
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(false)
+    end
+
+    it 'returns false when helpdesk_ticket is nil' do
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { nil }
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(false)
+    end
+
+    it 'returns true for admin when helpdesk_ticket is present' do
+      admin = User.allocate
+      def admin.admin?; true; end
+      User.current = admin
+
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { Object.new }
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(true)
+    end
+
+    it 'returns true when user has both view_helpdesk_tickets and description_access' do
+      user = User.allocate
+      def user.admin?; false; end
+      project = Object.new
+      user.define_singleton_method(:allowed_to?) { |perm, proj, **_| perm == :view_helpdesk_tickets && proj == project }
+      User.current = user
+
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { Object.new }
+      issue.define_singleton_method(:project) { project }
+      issue.define_singleton_method(:description_access_granted?) { |_u| true }
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(true)
+    end
+
+    it 'returns false when user lacks view_helpdesk_tickets' do
+      user = User.allocate
+      def user.admin?; false; end
+      user.define_singleton_method(:allowed_to?) { |_perm, _proj, **_| false }
+      User.current = user
+
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { Object.new }
+      issue.define_singleton_method(:description_access_granted?) { |_u| true }
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(false)
+    end
+
+    it 'returns false when user has view_helpdesk_tickets but lacks description_access' do
+      user = User.allocate
+      def user.admin?; false; end
+      user.define_singleton_method(:allowed_to?) { |_perm, _proj, **_| true }
+      User.current = user
+
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { Object.new }
+      issue.define_singleton_method(:description_access_granted?) { |_u| false }
+      controller.instance_variable_set(:@issue, issue)
+
+      expect(controller.send(:vid_helpdesk_access?)).to be(false)
     end
   end
 end

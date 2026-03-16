@@ -44,4 +44,19 @@ Rails.application.config.after_initialize do
   require_relative 'lib/redmine_view_issue_description/patches/activities_controller_patch'
   require_relative 'lib/redmine_view_issue_description/overrides/role_form_override'
   require_relative 'lib/redmine_view_issue_description/overrides/watchers_pagination_override'
+
+  # Validate Deface selector targets still exist in the Redmine source.
+  # If Redmine restructures its views, the overrides silently produce no match
+  # and the tracker-permission checkboxes disappear from the role form.
+  form_path = File.join(Rails.root, 'app', 'views', 'roles', '_form.html.erb')
+  if File.exist?(form_path)
+    content = File.read(form_path)
+    unless content.include?('permissions = [:view_issues,')
+      Rails.logger.warn(
+        '[redmine_view_issue_description] Deface selector may not match: ' \
+        'expected "permissions = [:view_issues," in roles/_form.html.erb. ' \
+        'Tracker permission checkboxes may not appear on the role form.'
+      )
+    end
+  end
 end

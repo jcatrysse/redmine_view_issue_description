@@ -103,7 +103,9 @@ RSpec.describe RedmineViewIssueDescription::Patches::QueryPatch::InstanceMethods
     User.current = @_saved_user
   end
 
-  def make_user(admin: false, permissions: {}, project_roles: {})
+  MembershipStub = Struct.new(:project, :roles)
+
+  def make_user(admin: false, permissions: {}, project_roles: {}, memberships: [])
     user = User.allocate
     user.define_singleton_method(:admin?) { admin }
     user.define_singleton_method(:allowed_to?) do |permission, proj, **_opts|
@@ -112,6 +114,7 @@ RSpec.describe RedmineViewIssueDescription::Patches::QueryPatch::InstanceMethods
     user.define_singleton_method(:roles_for_project) do |proj|
       project_roles[proj] || []
     end
+    user.define_singleton_method(:memberships) { memberships }
     user
   end
 
@@ -190,23 +193,49 @@ RSpec.describe RedmineViewIssueDescription::Patches::QueryPatch::InstanceMethods
   # ── Cross-project query (project is nil) ────────────────────────────────
 
   describe 'cross-project query (project nil)' do
-    before do
-      role = Role.new(all_tracker_permissions: [:view_issue_description])
-      User.current = make_user(
-        permissions: { [:view_issue_description, project_obj] => true },
-        project_roles: { project_obj => [role] }
-      )
-      query.project = nil
-    end
-
-    it 'hides description for non-admin when project is nil' do
-      expect(query.columns.map(&:name)).not_to include(:description)
-    end
+    before { query.project = nil }
 
     it 'shows description for admin when project is nil' do
       User.current = make_user(admin: true)
 
       expect(query.columns.map(&:name)).to include(:description)
+    end
+
+    it 'shows description when user has permission in all projects' do
+      project2 = Object.new
+      role = Role.new(all_tracker_permissions: [:view_issue_description])
+      m1 = MembershipStub.new(project_obj, [role])
+      m2 = MembershipStub.new(project2, [role])
+      User.current = make_user(
+        permissions: {
+          [:view_issue_description, project_obj] => true,
+          [:view_issue_description, project2] => true
+        },
+        project_roles: { project_obj => [role], project2 => [role] },
+        memberships: [m1, m2]
+      )
+
+      expect(query.columns.map(&:name)).to include(:description)
+    end
+
+    it 'hides description when user lacks permission in one project' do
+      project2 = Object.new
+      role = Role.new(all_tracker_permissions: [:view_issue_description])
+      m1 = MembershipStub.new(project_obj, [role])
+      m2 = MembershipStub.new(project2, [Role.new])
+      User.current = make_user(
+        permissions: { [:view_issue_description, project_obj] => true },
+        project_roles: { project_obj => [role], project2 => [Role.new] },
+        memberships: [m1, m2]
+      )
+
+      expect(query.columns.map(&:name)).not_to include(:description)
+    end
+
+    it 'hides description when user has no memberships' do
+      User.current = make_user(memberships: [])
+
+      expect(query.columns.map(&:name)).not_to include(:description)
     end
   end
 
