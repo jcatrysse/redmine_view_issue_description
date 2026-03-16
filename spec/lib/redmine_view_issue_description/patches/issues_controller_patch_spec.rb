@@ -268,6 +268,68 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuesControllerPatch::Inst
     end
   end
 
+  # ── vid_include_param?('helpdesk_ticket') ───────────────────────────────
+
+  describe '#vid_include_param? for helpdesk_ticket' do
+    it 'detects helpdesk_ticket in comma-separated include param' do
+      controller.params = { include: 'journals,helpdesk_ticket' }
+
+      expect(controller.send(:vid_include_param?, 'helpdesk_ticket')).to be(true)
+    end
+
+    it 'detects helpdesk_ticket in array include param' do
+      controller.params = { include: ['journals', 'helpdesk_ticket'] }
+
+      expect(controller.send(:vid_include_param?, 'helpdesk_ticket')).to be(true)
+    end
+
+    it 'returns false when helpdesk_ticket is not in includes' do
+      controller.params = { include: 'journals,changesets_new' }
+
+      expect(controller.send(:vid_include_param?, 'helpdesk_ticket')).to be(false)
+    end
+  end
+
+  # ── inject_vid_api_sections triggers on helpdesk_ticket include ────────
+
+  describe '#inject_vid_api_sections with helpdesk_ticket include' do
+    let(:api_controller_class) do
+      Class.new(controller_class) do
+        attr_accessor :response_obj, :logger_obj
+
+        def api_request?; true; end
+        def response; response_obj; end
+        def logger; logger_obj; end
+      end
+    end
+
+    it 'activates when only helpdesk_ticket is requested (no journal_messages)' do
+      ctrl = api_controller_class.new
+      ctrl.params = { include: 'helpdesk_ticket' }
+
+      resp = double('response', successful?: true, content_type: 'application/json', body: '{"issue":{}}')
+      allow(resp).to receive(:body=)
+      ctrl.response_obj = resp
+      warnings = []
+      ctrl.logger_obj = double('logger').tap { |l| allow(l).to receive(:warn) { |msg| warnings << msg } }
+
+      issue = make_issue
+      issue.define_singleton_method(:helpdesk_ticket) { nil }
+      ctrl.instance_variable_set(:@issue, issue)
+
+      ctrl.send(:inject_vid_api_sections)
+
+      # The method should have run through vid_inject_json (response.body= called)
+      # or if it rescued an error, the logger should have been warned
+      if warnings.any?
+        # It ran but hit an error — still proves it didn't early-return
+        expect(warnings.first).to include('redmine_view_issue_description')
+      else
+        expect(resp).to have_received(:body=)
+      end
+    end
+  end
+
   # ── vid_helpdesk_access? ─────────────────────────────────────────────────
 
   describe '#vid_helpdesk_access?' do

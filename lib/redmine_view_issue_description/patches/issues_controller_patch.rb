@@ -51,6 +51,11 @@ module RedmineViewIssueDescription
         # Injects changesets_new and helpdesk_ticket sections into the API
         # response rendered by Redmine core.  This avoids maintaining a full
         # copy of the core issues/show.api.rsb template.
+        #
+        # Supported include parameters:
+        #   changesets_new   - changeset data with repository info
+        #   helpdesk_ticket  - helpdesk ticket data (requires access)
+        #   journal_messages - journal messages (also triggers helpdesk_ticket)
 
         def inject_vid_api_sections
           return unless api_request? && response.successful?
@@ -58,13 +63,14 @@ module RedmineViewIssueDescription
 
           has_changesets_new   = vid_include_param?('changesets_new')
           has_journal_messages = vid_include_param?('journal_messages')
-          return unless has_changesets_new || has_journal_messages
+          has_helpdesk         = vid_include_param?('helpdesk_ticket')
+          return unless has_changesets_new || has_journal_messages || has_helpdesk
 
           content_type = response.content_type.to_s
           if content_type.include?('json')
-            vid_inject_json(has_changesets_new, has_journal_messages)
+            vid_inject_json(has_changesets_new, has_journal_messages, has_helpdesk)
           elsif content_type.include?('xml')
-            vid_inject_xml(has_changesets_new, has_journal_messages)
+            vid_inject_xml(has_changesets_new, has_journal_messages, has_helpdesk)
           end
         rescue StandardError => e
           logger.warn("[redmine_view_issue_description] Failed to inject API sections: #{e.message}")
@@ -101,13 +107,13 @@ module RedmineViewIssueDescription
 
         # ── JSON injection ───────────────────────────────────────────────────
 
-        def vid_inject_json(has_changesets_new, has_journal_messages)
+        def vid_inject_json(has_changesets_new, has_journal_messages, has_helpdesk)
           data = JSON.parse(response.body)
           issue_data = data['issue']
           return unless issue_data
 
           issue_data['changesets_new'] = vid_changesets_new_list if has_changesets_new
-          issue_data['helpdesk_ticket'] = vid_helpdesk_hash if has_journal_messages && vid_helpdesk_access?
+          issue_data['helpdesk_ticket'] = vid_helpdesk_hash if (has_helpdesk || has_journal_messages) && vid_helpdesk_access?
 
           response.body = data.to_json
         end
@@ -218,14 +224,14 @@ module RedmineViewIssueDescription
 
         # ── XML injection ────────────────────────────────────────────────────
 
-        def vid_inject_xml(has_changesets_new, has_journal_messages)
+        def vid_inject_xml(has_changesets_new, has_journal_messages, has_helpdesk)
           require 'nokogiri'
           doc = Nokogiri::XML(response.body)
           issue_node = doc.at_xpath('/issue')
           return unless issue_node
 
           vid_add_changesets_new_xml(issue_node, doc) if has_changesets_new
-          vid_add_helpdesk_xml(issue_node, doc) if has_journal_messages && vid_helpdesk_access?
+          vid_add_helpdesk_xml(issue_node, doc) if (has_helpdesk || has_journal_messages) && vid_helpdesk_access?
 
           response.body = doc.to_xml
         end

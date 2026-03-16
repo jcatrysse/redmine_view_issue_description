@@ -208,7 +208,11 @@ module RedmineViewIssueDescription
           per_page: params[:per_page],
           q: watcher_query,
           format: nil
-        }.merge(overrides)
+        }
+        # Preserve object_ids for bulk-watcher flows (context menu with multiple issues)
+        ids = params[:object_ids]
+        base[:'object_ids[]'] = ids if ids.is_a?(Array) && !ids.empty?
+        base.merge!(overrides)
 
         base.delete_if { |_, v| v.nil? || v.to_s.empty? }
       end

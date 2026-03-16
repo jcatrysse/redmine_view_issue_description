@@ -243,6 +243,9 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
       # Add Issue.where lookup used by resolve_issues_from_params.
       # Uses a class-level instance variable registry so each example can register
       # fake issues by id without triggering Ruby 3.x toplevel @@ warnings.
+      unless defined?(::Issue)
+        class ::Issue; end
+      end
       unless ::Issue.respond_to?(:where)
         ::Issue.instance_variable_set(:@_ctrl_spec_store, {})
 
@@ -539,6 +542,37 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
       result = controller.send(:users_for_new_watcher)
 
       expect(result.map(&:name)).to eq(users.sort_by(&:name).map(&:name))
+    end
+
+    it 'preserves object_ids in pagination link params for bulk-watcher flows' do
+      controller = WatchersController.new
+      controller.params = {
+        object_type: 'Issue',
+        object_ids: ['10', '20', '30'],
+        project_id: '1',
+        per_page: '10',
+        q: 'john'
+      }
+
+      result = controller.send(:watcher_pagination_link_params, page: 2)
+
+      expect(result[:'object_ids[]']).to eq(['10', '20', '30'])
+      expect(result[:object_type]).to eq('Issue')
+      expect(result[:page]).to eq(2)
+    end
+
+    it 'omits object_ids from pagination link params when not present' do
+      controller = WatchersController.new
+      controller.params = {
+        object_type: 'Issue',
+        object_id: '10',
+        project_id: '1'
+      }
+
+      result = controller.send(:watcher_pagination_link_params, page: 2)
+
+      expect(result).not_to have_key(:'object_ids[]')
+      expect(result[:object_id]).to eq('10')
     end
 
     it 'uses the principal scope when searching across multiple projects' do
