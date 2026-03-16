@@ -10,9 +10,10 @@ module RedmineViewIssueDescription
             return
           end
 
-          if api_request? && (include_changesets_new? || helpdesk_ticket_api_request?)
+          if api_request? && (include_changesets_new? || include_journal_messages?)
             # Set up variables needed by the custom API template and render directly.
             # This avoids a double-render that would occur if show_without_vid were called first.
+            @project    = @issue.project
             @journals   = @issue.visible_journals_with_index
             @changesets = @issue.changesets.visible
             @relations  = @issue.relations.select { |r| r.other_issue(@issue)&.visible? }
@@ -67,10 +68,13 @@ module RedmineViewIssueDescription
           end
         end
 
-        def helpdesk_ticket_api_request?
-          Redmine::Plugin.installed?('redmine_contacts_helpdesk') &&
-            @issue.respond_to?(:helpdesk_ticket) &&
-            @issue.helpdesk_ticket.present?
+        def include_journal_messages?
+          includes = params[:include]
+          if includes.is_a?(Array)
+            includes.map(&:to_s).include?('journal_messages')
+          else
+            includes.to_s.split(',').map(&:strip).include?('journal_messages')
+          end
         end
       end
     end

@@ -1,6 +1,6 @@
 require_relative '../../../spec_helper'
 
-unless defined?(RedmineViewIssueDescription)
+unless defined?(RedmineViewIssueDescription::Patches::IssuePatch)
   module RedmineViewIssueDescription
     module Patches
       module IssuePatch

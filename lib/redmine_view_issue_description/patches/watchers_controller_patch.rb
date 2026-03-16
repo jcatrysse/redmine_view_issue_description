@@ -4,8 +4,11 @@ require 'redmine/pagination'
 
 module RedmineViewIssueDescription
   module Patches
-    # Adds pagination and server-side filtering to the watcher candidate list
-    # so large projects (1000+ members) don't load every principal at once.
+    # Adds pagination and search filtering to the watcher candidate list.
+    # NOTE: the full candidate scope is materialised in memory so Ruby-level
+    # valid_watcher? checks can run before pagination.  Memory is O(N) where
+    # N = project members.  For very large projects (1000+ members) this is a
+    # known trade-off — the check cannot be pushed to SQL.
     module WatchersControllerPatch
       def self.included(base)
         base.class_eval do
@@ -109,8 +112,8 @@ module RedmineViewIssueDescription
         scope = apply_watcher_search(scope)
         scope = apply_watcher_sort(scope)
 
-        # Materialize before filtering so that Ruby-level valid_watcher? checks
-        # run before pagination; this ensures the paginator total count is accurate.
+        # Materialize the full scope so Ruby-level valid_watcher? checks can run
+        # before pagination.  This is O(N) in memory but ensures accurate totals.
         candidates = scope.respond_to?(:to_a) ? scope.to_a : Array(scope)
 
         # Exclude users already watching (for single watchable only)
@@ -137,7 +140,7 @@ module RedmineViewIssueDescription
         elsif projects.size == 1
           projects.first.principals.assignable_watchers
         else
-          # No project context: scope to project members only to avoid exposing all principals.
+          # No project context — falls back to the global assignable scope.
           # This path is only reached for non-project watchables (rare in practice).
           Principal.assignable_watchers
         end
@@ -146,7 +149,7 @@ module RedmineViewIssueDescription
       def principal_scope_for_multiple_projects
         Principal
           .joins(:members)
-          .where(:members => { :project_id => @projects })
+          .where(:members => { :project_id => @projects.map(&:id) })
           .assignable_watchers
           .distinct
       end
@@ -207,7 +210,7 @@ module RedmineViewIssueDescription
           format: nil
         }.merge(overrides)
 
-        base.delete_if { |_, v| v.blank? }
+        base.delete_if { |_, v| v.nil? || v.to_s.empty? }
       end
 
       def single_watchable?

@@ -149,9 +149,13 @@ RSpec.describe RedmineViewIssueDescription::Patches::WatchersControllerPatch do
     end
 
     class ::Project
-      attr_reader :principals
+      attr_reader :principals, :id
+
+      @@_vid_next_id = 0
 
       def initialize(users)
+        @@_vid_next_id += 1
+        @id = @@_vid_next_id
         @principals = FakeScope.new(users)
       end
     end
