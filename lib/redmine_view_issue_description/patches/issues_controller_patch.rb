@@ -364,20 +364,31 @@ module RedmineViewIssueDescription
   end
 end
 
+module RedmineViewIssueDescription
+  module Patches
+    module IssuesControllerPatch
+      module PrependMethods
+        def show
+          return render_403 unless vid_description_access?
+          super
+        end
+
+        def edit
+          return render_403 unless vid_description_access?
+          super
+        end
+
+        def update
+          return render_403 unless vid_description_access?
+          super
+        end
+      end
+    end
+  end
+end
+
+IssuesController.prepend(RedmineViewIssueDescription::Patches::IssuesControllerPatch::PrependMethods)
 IssuesController.include(RedmineViewIssueDescription::Patches::IssuesControllerPatch::InstanceMethods)
 IssuesController.class_eval do
-  unless method_defined?(:show_without_vid)
-    alias_method :show_without_vid, :show
-    alias_method :show, :show_with_vid
-  end
-  unless method_defined?(:edit_without_vid)
-    alias_method :edit_without_vid, :edit
-    alias_method :edit, :edit_with_vid
-  end
-  unless method_defined?(:update_without_vid)
-    alias_method :update_without_vid, :update
-    alias_method :update, :update_with_vid
-  end
-
   after_action :inject_vid_api_sections, only: [:show]
 end

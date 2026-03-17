@@ -1,5 +1,8 @@
 # CHANGELOG
 
+### 0.2.1
+* Fix SystemStackError: convert IssuesController patch to prepend
+
 ### 0.2.0
 * Complete refactoring of the plugin.
 
