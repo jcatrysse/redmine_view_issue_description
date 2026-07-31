@@ -138,6 +138,7 @@ module RedmineViewIssueDescription
           # The query is cheap (typically < 20 rows) and Redmine has query caching.
           tracker_ids = Tracker.respond_to?(:pluck) ? Tracker.pluck(:id) : Tracker.all.map(&:id)
           watched_clauses = []
+          scoped_project_ids = vid_scoped_project_ids(options)
 
           memberships = user.respond_to?(:memberships) ? Array(user.memberships) : []
           memberships.each do |membership|
@@ -145,6 +146,13 @@ module RedmineViewIssueDescription
             roles   = membership.respond_to?(:roles)   ? membership.roles   : []
 
             next unless project
+
+            # The caller's project restriction lives inside base_condition (core keeps it
+            # in Project.allowed_to_condition's base_statement), and the watched part is
+            # OR'ed outside of it. Re-apply the restriction here or project-scoped callers
+            # such as the project activity tab would also see watched issues from every
+            # other project the user is a member of.
+            next if scoped_project_ids && !scoped_project_ids.include?(project.id.to_i)
 
             # view_watched_issues: only lets the user see issues they are actually watching
             if user.allowed_to?(:view_watched_issues, project)
@@ -187,6 +195,37 @@ module RedmineViewIssueDescription
           watched_part = "((#{watched_sql}) AND (#{watched_clauses.join(' OR ')}))"
 
           "(#{base_condition}) OR (#{watched_part})"
+        end
+
+        private
+
+        # Project ids the caller restricted the query to, or nil when the caller is
+        # unscoped (global / cross-project). Mirrors what core does with
+        # options[:project] / options[:with_subprojects] in Project#project_condition:
+        # without :with_subprojects only the requested project counts, with it the
+        # requested project and its descendants do.
+        #
+        # Returning nil (and not an id list) for unscoped callers keeps the emitted
+        # SQL byte-for-byte identical for them.
+        def vid_scoped_project_ids(options)
+          return nil unless options.is_a?(Hash)
+
+          project = options[:project]
+          return nil unless project
+
+          projects =
+            if options[:with_subprojects] && project.respond_to?(:self_and_descendants)
+              scope = project.self_and_descendants
+              # ActiveRecord::Relation#ids plucks without instantiating the records;
+              # anything else (plain arrays in the specs) is walked directly.
+              scope.respond_to?(:ids) ? Array(scope.ids) : Array(scope)
+            else
+              [project]
+            end
+
+          # Fails closed: an unusable scope yields [] and drops every watched clause,
+          # which is narrower than the caller asked for but never leaks.
+          projects.map { |candidate| candidate.respond_to?(:id) ? candidate.id : candidate }.compact.map(&:to_i)
         end
       end
     end

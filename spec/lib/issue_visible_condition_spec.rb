@@ -201,4 +201,121 @@ RSpec.describe 'Issue.visible_condition patch' do
     expect(condition).to include('gu.user_id = 22')
     expect(condition).to include('issues.project_id = 4')
   end
+
+  # Regression test: the watched part is OR'ed outside the base condition, so it used
+  # to ignore the caller's project scope and leaked watched issues from every other
+  # member project into a project-scoped caller (e.g. /projects/x/activity).
+  it 'restricts watched issues to the requested project when the caller is project scoped' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    requested_project = double('Project', id: 3)
+    # Deliberately a different object with the same id: the scope check has to compare
+    # ids, not object identity, because Member#project is a separate AR instance.
+    memberships = [
+      Member.new(project: double('Project', id: 3), roles: [role]),
+      Member.new(project: double('Project', id: 4), roles: [role])
+    ]
+    user = User.new(id: 31, memberships: memberships)
+
+    condition = Issue.visible_condition(user, project: requested_project)
+
+    expect(condition).to include('issues.project_id = 3')
+    expect(condition).not_to include('issues.project_id = 4')
+  end
+
+  it 'includes descendants of the requested project when with_subprojects is set' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    parent = double('Project', id: 3)
+    child = double('Project', id: 4)
+    requested_project = double('Project', id: 3, self_and_descendants: [parent, child])
+    memberships = [
+      Member.new(project: parent, roles: [role]),
+      Member.new(project: child, roles: [role]),
+      Member.new(project: double('Project', id: 9), roles: [role])
+    ]
+    user = User.new(id: 32, memberships: memberships)
+
+    condition = Issue.visible_condition(user, project: requested_project, with_subprojects: true)
+
+    expect(condition).to include('issues.project_id = 3')
+    expect(condition).to include('issues.project_id = 4')
+    expect(condition).not_to include('issues.project_id = 9')
+  end
+
+  it 'keeps watched issues from every member project for unscoped callers' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    memberships = [
+      Member.new(project: double('Project', id: 3), roles: [role]),
+      Member.new(project: double('Project', id: 4), roles: [role])
+    ]
+    user = User.new(id: 33, memberships: memberships)
+
+    condition = Issue.visible_condition(user)
+
+    expect(condition).to include('issues.project_id = 3')
+    expect(condition).to include('issues.project_id = 4')
+  end
+
+  it 'resolves descendants through ActiveRecord::Relation#ids when available' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    relation = double('Project::ActiveRecord_Relation', ids: [3, 4])
+    requested_project = double('Project', id: 3, self_and_descendants: relation)
+    memberships = [
+      Member.new(project: double('Project', id: 3), roles: [role]),
+      Member.new(project: double('Project', id: 4), roles: [role]),
+      Member.new(project: double('Project', id: 9), roles: [role])
+    ]
+    user = User.new(id: 34, memberships: memberships)
+
+    condition = Issue.visible_condition(user, project: requested_project, with_subprojects: true)
+
+    expect(condition).to include('issues.project_id = 3')
+    expect(condition).to include('issues.project_id = 4')
+    expect(condition).not_to include('issues.project_id = 9')
+  end
+
+  it 'falls back to the requested project when it cannot enumerate descendants' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    requested_project = double('Project', id: 3)
+    memberships = [
+      Member.new(project: double('Project', id: 3), roles: [role]),
+      Member.new(project: double('Project', id: 4), roles: [role])
+    ]
+    user = User.new(id: 35, memberships: memberships)
+
+    condition = Issue.visible_condition(user, project: requested_project, with_subprojects: true)
+
+    expect(condition).to include('issues.project_id = 3')
+    expect(condition).not_to include('issues.project_id = 4')
+  end
+
+  it 'returns the base condition when the requested project grants no watcher access' do
+    Tracker.tracker_ids = [2]
+    role = Role.new(all_tracker_permissions: [:view_watched_issues])
+    membership = Member.new(project: double('Project', id: 4), roles: [role])
+    user = User.new(id: 36, memberships: [membership])
+
+    condition = Issue.visible_condition(user, project: double('Project', id: 3))
+
+    expect(condition).to eq('base_condition')
+  end
+
+  it 'keeps the tracker restricted clause intact for the requested project' do
+    Tracker.tracker_ids = [9]
+    role = Role.new(tracker_permissions: { view_watched_issues: [9] })
+    memberships = [
+      Member.new(project: double('Project', id: 7), roles: [role]),
+      Member.new(project: double('Project', id: 8), roles: [role])
+    ]
+    user = User.new(id: 37, memberships: memberships)
+
+    condition = Issue.visible_condition(user, project: double('Project', id: 7))
+
+    expect(condition).to include('(issues.project_id = 7 AND issues.tracker_id IN (9))')
+    expect(condition).not_to include('issues.project_id = 8')
+  end
 end

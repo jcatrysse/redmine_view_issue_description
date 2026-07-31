@@ -1,5 +1,20 @@
 # CHANGELOG
 
+### 0.2.2
+* Fixed cross-project leak in `Issue.visible_condition`: the watcher clause is
+  OR'ed outside the condition returned by core, which is where the caller's
+  project restriction lives, so project scoped callers also received watched
+  issues from every other project the user is a member of. Most visible on the
+  project activity tab (`/projects/<identifier>/activity`), which scopes through
+  `visible_condition`'s options instead of through a query statement; issue lists
+  were unaffected because `IssueQuery` applies its project filter separately.
+* The watcher clause now honours `options[:project]` and, when set,
+  `options[:with_subprojects]` (requested project plus its descendants).
+  Cross-project and global callers, as well as the `Journal` and `TimeEntry`
+  paths, keep their previous SQL unchanged.
+* Added regression specs for project scoped, subproject scoped and unscoped
+  callers.
+
 ### 0.2.1
 * Fix SystemStackError: convert IssuesController patch to prepend
 
