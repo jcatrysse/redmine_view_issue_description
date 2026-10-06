@@ -5,7 +5,7 @@
 #      JavaScript errors, missing assets, a screenshot of each page);
 #   2. .codex/e2e/core.mjs: creating and editing an issue, the context menu
 #      and a refusal, with the plugin installed;
-#   3. every test/e2e/*.mjs in this repo: the plugin's own scenarios, one
+#   3. every test/e2e/*.mjs in this repo (files starting with _ are shared helpers): the plugin's own scenarios, one
 #      screenshot per function, with and without the plugin's permissions.
 # Screenshots and one <scenario>.md per script go to docs/e2e/ (RMP_E2E_OUT):
 # commit them, they are the evidence. For "before" pictures run the same
@@ -48,7 +48,7 @@ else
     (cd "$PLUGIN_ROOT" && node .codex/e2e/core.mjs) || status=1
   fi
   if [ -d "$PLUGIN_ROOT/test/e2e" ]; then
-    while IFS= read -r f; do scripts+=("$f"); done < <(find "$PLUGIN_ROOT/test/e2e" -name '*.mjs' | sort)
+    while IFS= read -r f; do scripts+=("$f"); done < <(find "$PLUGIN_ROOT/test/e2e" -name '*.mjs' ! -name '_*' | sort)
   fi
 fi
 
