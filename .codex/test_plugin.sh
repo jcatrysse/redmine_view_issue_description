@@ -8,6 +8,15 @@ MISE_BIN="${MISE_BIN:-mise}"
 detect_ruby_version() {
   local version=""
 
+  # The Ruby on PATH is fine when it satisfies Redmine's Gemfile: no mise needed.
+  if [ ! -f ".ruby-version" ] && [ -f "Gemfile" ] && command -v ruby >/dev/null 2>&1 &&
+     ruby -e 'l = File.read("Gemfile")[/^\s*ruby\s+(.+)$/, 1] or exit 1
+              reqs = l.scan(/[\x22\x27]([^\x22\x27]+)[\x22\x27]/).flatten
+              exit Gem::Requirement.new(*reqs).satisfied_by?(Gem::Version.new(RUBY_VERSION)) ? 0 : 1'; then
+    echo ""
+    return
+  fi
+
   if [ -f ".ruby-version" ]; then
     version="$(tr -d '\n' < .ruby-version)"
   elif [ -f "Gemfile" ]; then

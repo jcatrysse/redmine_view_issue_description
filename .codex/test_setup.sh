@@ -8,6 +8,15 @@ MISE_BIN="${MISE_BIN:-mise}"
 detect_ruby_version() {
   local version=""
 
+  # The Ruby on PATH is fine when it satisfies Redmine's Gemfile: no mise needed.
+  if [ ! -f ".ruby-version" ] && [ -f "Gemfile" ] && command -v ruby >/dev/null 2>&1 &&
+     ruby -e 'l = File.read("Gemfile")[/^\s*ruby\s+(.+)$/, 1] or exit 1
+              reqs = l.scan(/[\x22\x27]([^\x22\x27]+)[\x22\x27]/).flatten
+              exit Gem::Requirement.new(*reqs).satisfied_by?(Gem::Version.new(RUBY_VERSION)) ? 0 : 1'; then
+    echo ""
+    return
+  fi
+
   if [ -f ".ruby-version" ]; then
     version="$(tr -d '\n' < .ruby-version)"
   elif [ -f "Gemfile" ]; then
@@ -36,22 +45,54 @@ detect_ruby_version() {
   echo "$version"
 }
 
-# System deps (Ubuntu/Debian)
-sudo apt-get update
-sudo apt-get install -y build-essential libpq-dev nodejs postgresql postgresql-contrib
+# RMP_DB=postgresql (default) or mariadb (MySQL/MariaDB, adapter mysql2).
+RMP_DB="${RMP_DB:-postgresql}"
+SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
 
-# Start postgres
-sudo service postgresql start
+if [ "$RMP_DB" = mariadb ] || [ "$RMP_DB" = mysql ]; then
+  # System deps (Ubuntu/Debian)
+  command -v mysqld >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y build-essential libmariadb-dev mariadb-server nodejs; }
 
-# Create user/db (idempotent-ish)
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='redmine'" | grep -q 1; then
-  sudo -u postgres psql -c "ALTER ROLE redmine WITH LOGIN CREATEDB PASSWORD 'redmine';"
+  # Start MariaDB (no systemd in containers: fall back to mysqld_safe)
+  if ! $SUDO mysql -e 'SELECT 1' >/dev/null 2>&1; then
+    $SUDO service mariadb start >/dev/null 2>&1 || ($SUDO mysqld_safe >/dev/null 2>&1 &)
+    for _ in $(seq 1 30); do $SUDO mysql -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+  fi
+
+  $SUDO mysql -e "CREATE USER IF NOT EXISTS 'redmine'@'localhost' IDENTIFIED BY 'redmine';
+    CREATE USER IF NOT EXISTS 'redmine'@'%' IDENTIFIED BY 'redmine';
+    GRANT ALL ON \`redmine_test\`.* TO 'redmine'@'localhost';
+    GRANT ALL ON \`redmine_test\`.* TO 'redmine'@'%';
+    FLUSH PRIVILEGES;"
+
+  cat > "$REDMINE_DIR/config/database.yml" <<'EOF'
+test:
+  adapter: mysql2
+  database: redmine_test
+  host: 127.0.0.1
+  port: 3306
+  username: redmine
+  password: redmine
+  encoding: utf8mb4
+  variables:
+    transaction_isolation: "READ-COMMITTED"
+EOF
 else
-  sudo -u postgres psql -c "CREATE ROLE redmine WITH LOGIN CREATEDB PASSWORD 'redmine';"
-fi
-sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='redmine_test'" | grep -q 1 || sudo -u postgres createdb -O redmine redmine_test
+  # System deps (Ubuntu/Debian)
+  command -v psql >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y build-essential libpq-dev nodejs postgresql postgresql-contrib; }
 
-cat > "$REDMINE_DIR/config/database.yml" <<'EOF'
+  # Start postgres
+  $SUDO service postgresql start
+
+  # Create user/db (idempotent-ish)
+  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='redmine'" | grep -q 1; then
+    sudo -u postgres psql -c "ALTER ROLE redmine WITH LOGIN CREATEDB PASSWORD 'redmine';"
+  else
+    sudo -u postgres psql -c "CREATE ROLE redmine WITH LOGIN CREATEDB PASSWORD 'redmine';"
+  fi
+  sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='redmine_test'" | grep -q 1 || sudo -u postgres createdb -O redmine redmine_test
+
+  cat > "$REDMINE_DIR/config/database.yml" <<'EOF'
 test:
   adapter: postgresql
   database: redmine_test
@@ -60,6 +101,7 @@ test:
   password: redmine
   encoding: unicode
 EOF
+fi
 
 cd "$REDMINE_DIR"
 

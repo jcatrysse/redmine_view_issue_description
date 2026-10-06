@@ -35,9 +35,14 @@ await t.page.waitForSelector('#context-menu ul', { timeout: 10000 }).catch(() =>
 t.check('context menu');
 await t.shot('context-menu', 'The context menu on the issue list', { full: false });
 
+// A plugin that guards the issue page itself (redmine_view_issue_description) refuses
+// it to the reporter on purpose: RMP_CORE_REPORTER_ISSUE_STATUS=403.
+const reporterIssueStatus = Number(process.env.RMP_CORE_REPORTER_ISSUE_STATUS || 200);
 await t.login('reporter');
-await t.go('/issues/1');
-await t.shot('issue-as-reporter', 'An issue seen by a member without the plugin\'s permissions');
+await t.go('/issues/1', { status: reporterIssueStatus });
+await t.shot('issue-as-reporter', reporterIssueStatus === 200
+  ? 'An issue seen by a member without the plugin\'s permissions'
+  : `A member without the plugin's permissions gets HTTP ${reporterIssueStatus} on the issue, as the plugin intends`);
 
 await t.login('outsider');
 await t.go('/projects/e2e-private', { status: 403 });

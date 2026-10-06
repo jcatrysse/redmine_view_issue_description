@@ -43,6 +43,8 @@ else
   fi
   if [ "${RMP_E2E_CORE:-1}" != 0 ]; then
     echo "== core flows"
+    # This plugin refuses the issue page to members without view_issue_description.
+    export RMP_CORE_REPORTER_ISSUE_STATUS="${RMP_CORE_REPORTER_ISSUE_STATUS:-403}"
     (cd "$PLUGIN_ROOT" && node .codex/e2e/core.mjs) || status=1
   fi
   if [ -d "$PLUGIN_ROOT/test/e2e" ]; then

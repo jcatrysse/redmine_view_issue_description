@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REDMINE_VERSION="${1:-5.1-stable}"   # 5.1-stable, 6.0-stable, 6.1-stable
+# Branches: 7.0-stable-GEOxyz (what GEOxyz runs), 7.0-stable, 6.1-stable, 5.1-stable.
+# The GEOxyz fork carries the upstream stable branches as well.
+REDMINE_VERSION="${1:-7.0-stable-GEOxyz}"
 REDMINE_DIR="${REDMINE_DIR:-redmine}"
-REDMINE_REPO_URL="https://github.com/redmine/redmine.git"
+REDMINE_REPO_URL="${REDMINE_REPO_URL:-https://github.com/jcatrysse/redmine.git}"
+# Other plugins to install next to this one (space separated checkout paths),
+# e.g. RMP_EXTRA_PLUGINS="../redmine_contacts ../redmine_contacts_helpdesk".
+# The directory name of each path must be the plugin id.
+RMP_EXTRA_PLUGINS="${RMP_EXTRA_PLUGINS:-}"
 
 if ! git ls-remote --heads "$REDMINE_REPO_URL" "$REDMINE_VERSION" | grep -q "$REDMINE_VERSION"; then
   echo "ERROR: Redmine branch '$REDMINE_VERSION' not found on $REDMINE_REPO_URL" >&2
@@ -23,3 +29,9 @@ fi
 PLUGIN_NAME="$(basename "$(pwd)")"
 mkdir -p "$REDMINE_DIR/plugins/$PLUGIN_NAME"
 rsync -a --delete --exclude "$REDMINE_DIR/" --exclude .git/ ./ "$REDMINE_DIR/plugins/$PLUGIN_NAME/"
+
+for extra in $RMP_EXTRA_PLUGINS; do
+  extra_name="$(basename "$extra")"
+  mkdir -p "$REDMINE_DIR/plugins/$extra_name"
+  rsync -a --delete --exclude .git/ "$extra/" "$REDMINE_DIR/plugins/$extra_name/"
+done
