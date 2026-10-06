@@ -107,3 +107,18 @@ repository.fetch_changesets
 
 puts "Plugin seed: #{watchers.size} watcher users, scoped, hookuser; " \
      "webhooks #{defined?(Webhook) ? Webhook.count : 'n/a'}; changesets on ##{assigned.id}: #{assigned.reload.changesets.count}"
+
+# With redmine_contacts_helpdesk installed: a helpdesk ticket with a contact on
+# "E2E related issue", for test/e2e/helpdesk_api.mjs.
+if defined?(HelpdeskTicket)
+  project.enable_module!(:contacts)
+  project.enable_module!(:contacts_helpdesk)
+  ticket_issue = Issue.find_by!(project_id: project.id, subject: 'E2E related issue')
+  unless HelpdeskTicket.where(issue_id: ticket_issue.id).exists?
+    contact = Contact.create!(first_name: 'Jane', last_name: 'Customer', email: 'jane@example.net',
+                              project: project, projects: [project])
+    HelpdeskTicket.create!(issue: ticket_issue, contact: contact, from_address: 'jane@example.net',
+                           ticket_date: Time.now, source: HelpdeskTicket::HELPDESK_EMAIL_SOURCE)
+  end
+  puts "Helpdesk ticket on ##{ticket_issue.id}"
+end
