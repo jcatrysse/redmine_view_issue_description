@@ -79,6 +79,17 @@ module RedmineViewIssueDescription
             watcher_access_granted?(user)
         end
 
+        # Makes #description return nil on this loaded record only, for lists
+        # (issue queries) shown to a user who may not open the issue. The
+        # attribute itself is untouched, so a save never writes the nil.
+        def vid_hide_description!
+          @vid_description_hidden = true
+        end
+
+        def description
+          @vid_description_hidden ? nil : super
+        end
+
         def addable_watcher_users_with_vid(user = User.current)
           base = addable_watcher_users_without_vid(user)
           return base unless project
