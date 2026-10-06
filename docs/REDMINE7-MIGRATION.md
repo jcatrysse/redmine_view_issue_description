@@ -20,7 +20,7 @@ what is left. Written 2026-10-06 from a measured analysis (report at the bottom)
 | After sync | n.v.t. |
 | Complexity (1 trivial .. 5 rewrite) | 2 |
 | Measured on | Redmine 7.0.1 (7.0-stable-GEOxyz + latest 7.0-stable), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16 and MariaDB 10.11 |
-| Branch head when this file was written | `e289ec6` |
+| Branch head when this file was written | `eb0c272` |
 
 ## Already on this branch
 
@@ -32,18 +32,19 @@ In this order: things that break, security, the GEOxyz changes, the open items, 
 
 **Priority items**
 
-1. Redmine 7 webhooks (#29664) send the core issue API payload (app/views/issues/show.api.rsb, rendered as the webhook owner) and bypass plugin hooks and patches on controllers/views. Check whether this plugin changes what an issue shows, hides or adds, and make webhook payloads consistent with that. Here: the description reaches webhook owners who lack view_issue_description; also GET /issues.json (index) is not filtered.
+1. Helpdesk 4.3.x renamed HelpdeskTicket#customer to #contact (and Issue#customer to #helpdesk_contact): lib/redmine_view_issue_description/patches/issues_controller_patch.rb lines 161-162 and 276-277 call `ticket.customer` and raise NoMethodError in the API output once helpdesk 4.3.1 is installed. Use `ticket.contact`; test with redmine_contacts_helpdesk@redmine70-migration installed.
+2. Redmine 7 webhooks (#29664) send the core issue API payload (app/views/issues/show.api.rsb, rendered as the webhook owner) and bypass plugin hooks and patches on controllers/views. Check whether this plugin changes what an issue shows, hides or adds, and make webhook payloads consistent with that. Here: the description reaches webhook owners who lack view_issue_description; also GET /issues.json (index) is not filtered.
 
 **Open items from the analysis** (Dutch; where they repeat a priority item, the priority item wins)
 
-2. Redmine 7 webhooks (#29664) sturen issues/show.api.rsb incl. description naar webhook-eigenaars die alleen visible? nodig hebben: afschermen of use_webhooks niet toekennen
-3. Watcher-modal deface overrides (watchers/_new, watchers/autocomplete_for_user) handmatig testen op 7.0 (selectors statisch identiek)
-4. Pre-existing: GET /issues.json bevat description, niet afgeschermd
+3. Redmine 7 webhooks (#29664) sturen issues/show.api.rsb incl. description naar webhook-eigenaars die alleen visible? nodig hebben: afschermen of use_webhooks niet toekennen
+4. Watcher-modal deface overrides (watchers/_new, watchers/autocomplete_for_user) handmatig testen op 7.0 (selectors statisch identiek)
+5. Pre-existing: GET /issues.json bevat description, niet afgeschermd
 
 **Checks**
 
-5. Run the plugin's whole test suite on Redmine 7.0-stable-GEOxyz with PostgreSQL AND MariaDB, and once on 5.1-stable if the branch is meant to stay 5.1-compatible.
-6. Verify every feature of the plugin by hand on a running Redmine 7 (screenshots).
+6. Run the plugin's whole test suite on Redmine 7.0-stable-GEOxyz with PostgreSQL AND MariaDB, and once on 5.1-stable if the branch is meant to stay 5.1-compatible.
+7. Verify every feature of the plugin by hand on a running Redmine 7 (screenshots).
 
 ## GEOxyz changes to review or re-apply
 
