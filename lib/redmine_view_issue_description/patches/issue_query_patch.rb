@@ -12,10 +12,25 @@ module RedmineViewIssueDescription
       def issues(options = {})
         issues = super
         user = User.current
-        return issues if user.admin?
+        return issues if user.admin? || issues.empty?
 
-        issues.each do |issue|
+        # Load in one query each what the check reads, instead of once per issue.
+        vid_preload(issues, [:tracker])
+        unsure = issues.reject { |issue| issue.description_access_granted?(user) }
+        vid_preload(unsure, [:assigned_to, :watcher_users]) if unsure.any?
+        unsure.each do |issue|
           issue.vid_hide_description! unless issue.detail_access_granted?(user)
+        end
+        issues
+      end
+
+      private
+
+      def vid_preload(records, associations)
+        if ActiveRecord.version >= Gem::Version.new('7.0')
+          ActiveRecord::Associations::Preloader.new(records: records, associations: associations).call
+        else
+          ActiveRecord::Associations::Preloader.new.preload(records, associations)
         end
       end
     end

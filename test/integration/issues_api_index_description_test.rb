@@ -85,4 +85,33 @@ class IssuesApiIndexDescriptionTest < Redmine::IntegrationTest
     assert_not_includes response.body, 'Secret description'
     assert_includes response.body, 'Assigned description'
   end
+
+  test 'the per-issue check costs no query per issue' do
+    count_queries = lambda do |login, password|
+      queries = 0
+      counter = ->(*, payload) { queries += 1 unless payload[:name] == 'SCHEMA' || payload[:cached] }
+      ActiveSupport::Notifications.subscribed(counter, 'sql.active_record') do
+        get '/projects/ecookbook/issues.json', params: { status_id: '*', limit: 100 },
+                                               headers: credentials(login, password)
+      end
+      assert_response :success
+      queries
+    end
+    # view_watched_issues makes the check look at assignee and watchers too
+    vid_grant(@role, :view_watched_issues)
+    count_queries.call('dlopper', 'foo') # warm up
+    user_before = count_queries.call('dlopper', 'foo')
+    admin_before = count_queries.call('admin', 'admin') # admin skips the check: core's own cost
+    20.times do |n|
+      issue = Issue.generate!(project: @project, tracker: Tracker.find(n.even? ? 1 : 2), author: User.find(1),
+                              assigned_to: (n % 3).zero? ? User.find(2) : nil)
+      Watcher.create!(watchable: issue, user: User.find(3)) if (n % 4).zero?
+    end
+    user_growth = count_queries.call('dlopper', 'foo') - user_before
+    admin_growth = count_queries.call('admin', 'admin') - admin_before
+
+    # a few constant preload queries (watchers, their users) are fine, one per issue is not
+    assert_operator user_growth - admin_growth, :<=, 5,
+                    "20 more issues: #{user_growth} more queries for dlopper, #{admin_growth} for admin"
+  end
 end
