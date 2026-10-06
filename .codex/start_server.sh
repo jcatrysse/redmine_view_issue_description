@@ -89,7 +89,14 @@ fi
 [ -f "$REDMINE_DIR/config/initializers/secret_token.rb" ] || run bundle exec rake generate_secret_token
 
 export RAILS_ENV="$RMP_SERVER_ENV"
-if [ "$reset" = 1 ]; then
+if [ "$adapter" = mysql2 ] && [ -n "${grant:-}" ]; then
+  # Some plugins touch the database while Redmine boots, so rake db:drop/db:create
+  # cannot run against a missing MySQL database: drop and create it with the client.
+  create="CREATE DATABASE IF NOT EXISTS \`${RMP_SERVER_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  [ "$reset" = 1 ] && create="DROP DATABASE IF EXISTS \`${RMP_SERVER_DB_NAME}\`; $create"
+  $SUDO mysql -e "$create" 2>/dev/null ||
+    mysql -h "$host" -P "$port" -uroot -p"$password" -e "$create" 2>/dev/null || true
+elif [ "$reset" = 1 ]; then
   DISABLE_DATABASE_ENVIRONMENT_CHECK=1 run bundle exec rake db:drop || true
 fi
 # Redmine ships no schema.rb; one left by another adapter would be loaded instead of migrating.

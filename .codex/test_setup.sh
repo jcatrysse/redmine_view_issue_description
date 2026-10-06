@@ -59,7 +59,9 @@ if [ "$RMP_DB" = mariadb ] || [ "$RMP_DB" = mysql ]; then
     for _ in $(seq 1 30); do $SUDO mysql -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
   fi
 
-  $SUDO mysql -e "CREATE USER IF NOT EXISTS 'redmine'@'localhost' IDENTIFIED BY 'redmine';
+  # The database must exist before db:drop: Redmine (and some plugins) touch it while booting.
+  $SUDO mysql -e "CREATE DATABASE IF NOT EXISTS \`redmine_test\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE USER IF NOT EXISTS 'redmine'@'localhost' IDENTIFIED BY 'redmine';
     CREATE USER IF NOT EXISTS 'redmine'@'%' IDENTIFIED BY 'redmine';
     GRANT ALL ON \`redmine_test\`.* TO 'redmine'@'localhost';
     GRANT ALL ON \`redmine_test\`.* TO 'redmine'@'%';
@@ -75,7 +77,8 @@ test:
   password: redmine
   encoding: utf8mb4
   variables:
-    transaction_isolation: "READ-COMMITTED"
+    # MariaDB before 11.1 knows tx_isolation only (MySQL 8: transaction_isolation)
+    tx_isolation: "READ-COMMITTED"
 EOF
 else
   # System deps (Ubuntu/Debian)
