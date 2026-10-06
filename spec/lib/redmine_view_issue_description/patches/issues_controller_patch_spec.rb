@@ -22,6 +22,7 @@ unless defined?(IssuesController)
     end
 
     def self.after_action(*); end
+    def self.before_action(*); end
   end
 end
 

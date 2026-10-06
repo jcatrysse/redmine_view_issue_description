@@ -33,6 +33,14 @@ module RedmineViewIssueDescription
 
         private
 
+        # before_action on show, edit and update (after core's find_issue). A refusal
+        # here halts the chain, so the action and every after_action of core and other
+        # plugins are skipped: helpdesk's flash_helpdesk raised a 500 on a refused
+        # update when the refusal happened inside the action.
+        def vid_authorize_issue_detail
+          render_403 unless vid_description_access?
+        end
+
         # Returns true when the current user may access the issue description/detail page.
         # Paths to access:
         #   1. Global admin
@@ -372,31 +380,8 @@ module RedmineViewIssueDescription
   end
 end
 
-module RedmineViewIssueDescription
-  module Patches
-    module IssuesControllerPatch
-      module PrependMethods
-        def show
-          return render_403 unless vid_description_access?
-          super
-        end
-
-        def edit
-          return render_403 unless vid_description_access?
-          super
-        end
-
-        def update
-          return render_403 unless vid_description_access?
-          super
-        end
-      end
-    end
-  end
-end
-
-IssuesController.prepend(RedmineViewIssueDescription::Patches::IssuesControllerPatch::PrependMethods)
 IssuesController.include(RedmineViewIssueDescription::Patches::IssuesControllerPatch::InstanceMethods)
 IssuesController.class_eval do
+  before_action :vid_authorize_issue_detail, only: [:show, :edit, :update]
   after_action :inject_vid_api_sections, only: [:show]
 end
