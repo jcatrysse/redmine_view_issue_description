@@ -18,16 +18,30 @@ what is left. Written 2026-10-06 from a measured analysis (report at the bottom)
 | Plugin id | `redmine_view_issue_description` |
 | GEOxyz runs today | `main` |
 | Upstream | redminetrustteam/redmine_view_issue_description (main @ 07d5be9, 2023-08-07, voorouder van main) |
-| Runs on Redmine 7 as is | JA |
+| Runs on Redmine 7 as is | JA (analysis); the migration session found 4 defects, fixed on this branch |
 | Upstream sync | NIET NODIG |
 | After sync | n.v.t. |
 | Complexity (1 trivial .. 5 rewrite) | 2 |
-| Measured on | Redmine 7.0.1 (7.0-stable-GEOxyz + latest 7.0-stable), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16 and MariaDB 10.11 |
-| Branch head when this file was written | `644fb4e` |
+| Measured on | Redmine 7.0.1 (7.0-stable-GEOxyz @ 8067e23), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16.15 and MariaDB 10.11.14; Redmine 5.1-stable (Rails 6.1.7.10, Ruby 3.2.6) |
+| Migration session | 2026-10-06, done: every work list item fixed or answered, tests and e2e green on both databases, OpenAI review without open findings |
+| Plugin version | 0.3.0 |
 
 ## Already on this branch
 
-- nothing: the branch equals the branch GEOxyz runs today.
+Commits after the plan (`8a43e9c..`), one concern each:
+
+| commit | what |
+|---|---|
+| 7e3604e, 0493f1d, 136470b | test tooling: 7.0-stable-GEOxyz from jcatrysse/redmine, `RMP_DB=mariadb`, `RMP_EXTRA_PLUGINS`, Ruby on PATH, databases created with the client (contacts reads the DB at boot) |
+| 1938c64, af8ba03 | work list 1: helpdesk 4.3 `ticket.contact` (fallback `customer` for older helpdesk), spec + integration test + e2e on real helpdesk 4.3.1 |
+| 9b446eb | work list 2/3: webhooks, issue events only to hook owners who may open the issue |
+| 7f2e8b9, a397f23 | work list 5: no description in issue lists (API index, CSV, PDF, Atom, block column) for issues the user may not open; preload against N+1 (OpenAI finding) |
+| 2289618 | work list 4: watcher modal keeps checked users across its pages |
+| badf0c3 | combination finding: refusal in a `before_action` (helpdesk after_action gave 500 on a refused update) |
+| 74bac69 | e2e scenarios for every function (`test/e2e/`) |
+| a5a8057, 0d46145 | e2e evidence MariaDB, PostgreSQL, 5.1 before/after; MariaDB optimizer finding |
+| c2fd015, e109318 | OpenAI reviews (`docs/reviews/`) |
+| b1f50b2 | version 0.3.0, CHANGELOG, README |
 
 ## Work list for the migration session
 
@@ -36,18 +50,33 @@ In this order: things that break, security, the GEOxyz changes, the open items, 
 **Priority items**
 
 1. Helpdesk 4.3.x renamed HelpdeskTicket#customer to #contact (and Issue#customer to #helpdesk_contact): lib/redmine_view_issue_description/patches/issues_controller_patch.rb lines 161-162 and 276-277 call `ticket.customer` and raise NoMethodError in the API output once helpdesk 4.3.1 is installed. Use `ticket.contact`; test with redmine_contacts_helpdesk@redmine70-migration installed.
+   **Done** (1938c64, af8ba03). The NoMethodError was rescued and logged, so `helpdesk_ticket` silently disappeared from the API. Now `ticket.contact`, with `customer` as fallback for older helpdesk (5.1). Verified with redmine_contacts + redmine_contacts_helpdesk 4.3.1 @ redmine70-migration: `test/integration/issues_api_helpdesk_test.rb` (5 tests; on the old code 2 failures + 2 errors, log "undefined method `customer' for an instance of HelpdeskTicket") and `test/e2e/helpdesk_api.mjs`. `Issue#customer` is not used by this plugin.
 2. Redmine 7 webhooks (#29664) send the core issue API payload (app/views/issues/show.api.rsb, rendered as the webhook owner) and bypass plugin hooks and patches on controllers/views. Check whether this plugin changes what an issue shows, hides or adds, and make webhook payloads consistent with that. Here: the description reaches webhook owners who lack view_issue_description; also GET /issues.json (index) is not filtered.
+   **Done** (9b446eb). The plugin refuses the whole issue page (and API show) without detail access, so `Webhook.hooks_for` now drops issue hooks whose owner fails `Issue#detail_access_granted?` (admin, view_issue_description, assignee, watcher with view_watched_issues). News and wiki hooks unchanged; loads only where `Webhook` exists. The plugin's own API additions (changesets_new, helpdesk_ticket) are not added to webhook payloads (core renders show.api.rsb without the include param), same as before. Tests: `test/unit/webhook_issue_detail_test.rb`; e2e `test/e2e/webhooks.mjs` with a real receiver (hookuser gets nothing, manager gets the update; hookuser gets it once assignee). Choice recorded under "Open questions for Jan" (1).
 
 **Open items from the analysis** (Dutch; where they conflict with a decision or a priority item above, those win)
 
 3. Redmine 7 webhooks (#29664) sturen issues/show.api.rsb incl. description naar webhook-eigenaars die alleen visible? nodig hebben: afschermen of use_webhooks niet toekennen
+   **Gedaan**: afgeschermd, zie 2.
 4. Watcher-modal deface overrides (watchers/_new, watchers/autocomplete_for_user) handmatig testen op 7.0 (selectors statisch identiek)
+   **Gedaan**: beide overrides werken op 7.0 (paginering 25 per pagina, zoeken, lege zoekopdracht, toevoegen; `test/e2e/watchers_modal.mjs`). Gevonden en opgelost (2289618): een op pagina 1 aangevinkte gebruiker was na paginawissel niet meer aangevinkt; 7.0 core bewaart vinkjes bij zoeken (`checkboxSelector`), de plugin-paginatie omzeilde dat. Op 5.1 ging het altijd verloren. Restbeperking, core: in 7.0 verdwijnen de bewaarde vinkjes zolang een zoekopdracht nul resultaten heeft (core `restoreChecked` vindt dan geen veldnaam); zoekveld leegmaken brengt ze terug. Op 5.1 bewaart core bij zoeken niets.
 5. Pre-existing: GET /issues.json bevat description, niet afgeschermd
+   **Gedaan** (7f2e8b9, a397f23): `IssueQuery#issues` markeert issues die de gebruiker niet mag openen, `Issue#description` geeft daar `nil` (attribuut ongewijzigd, wordt nooit teruggeschreven). Geldt voor API index (JSON/XML: `"description": null`), CSV, PDF, Atom en de HTML-beschrijvingskolom; dat dekt ook tracker-beperkte rechten, die vroeger alle beschrijvingen in de kolom toonden. Tests: `test/integration/issues_api_index_description_test.rb` (incl. query-telling), e2e `description_lists.mjs`; before-beelden op 5.1 in `docs/e2e/before/`.
 
 **Checks**
 
 6. Run the plugin's whole test suite on Redmine 7.0-stable-GEOxyz with PostgreSQL AND MariaDB, and once on 5.1-stable if the branch is meant to stay 5.1-compatible.
+   **Done**, see "Results".
 7. Verify every feature of the plugin by hand on a running Redmine 7 (screenshots).
+   **Done**, see "Inventory of functions" and "Results".
+
+**Found during the session**
+
+8. With redmine_contacts_helpdesk installed, a refused `PATCH /issues/:id` answered 500 (helpdesk's `after_action :flash_helpdesk` reads `@issue.current_journal`, which a refused update never built). **Fixed** (badf0c3): the refusal is a `before_action`, which halts the chain. Test `test/integration/issue_detail_refusal_test.rb` (fails on the old code). The helpdesk after_action itself (`current_journal.is_send_note` without nil check) could get a guard in redmine_contacts_helpdesk as well; not changed there.
+9. MariaDB 10.11.14 returns no rows for Redmine core's `Issue.visible_condition` with a project (project issue list) for a member of a public project whose role sees all issues; PostgreSQL returns them. Not this plugin's SQL. Standalone reproduction `docs/findings/mariadb-10.11-semijoin.sql` (0, and 8 with `optimizer_switch='semijoin=off'`); failing run kept in `docs/findings/`. See "After the upgrade".
+10. Pre-existing, not fixed (no item in the work list, larger than a migration fix): the description still reaches users who may not open the issue through `/search` and `/search.json` (measured: reporter gets "Description of E2E second tracker issue" for #8, while `/issues/8` is refused), through the activity stream (event description, only for roles with `view_activities`), and possibly through issue notification mails to members who see but may not open the issue (not measured). See "Open questions for Jan" (3).
+11. Core's own webhook tests (`test/unit/webhook_test.rb`) assume an owner with `view_issues` gets issue hooks; with this plugin installed they would fail for owners without detail access. Intended; only relevant if core tests run with the plugin.
+12. `init.rb` url/author_url still point to redminetrustteam (analysis remark); left unchanged.
 
 ## GEOxyz changes to review or re-apply
 
@@ -57,7 +86,11 @@ Own plugin: all of it is GEOxyz code, so there is nothing to re-apply. While mig
 
 Actions the person doing the upgrade must take, or know about, for this plugin:
 
-- None known. Add here what the session finds.
+- `bundle install` (deface 1.9.0 resolves next to Rails 8.1); no plugin migrations; restart.
+- Webhooks (if enabled): issue events now reach only hook owners who may open the issue (`view_issue_description`, assignee, or watcher with `view_watched_issues`). Owners that only have `view_issues` + `use_webhooks` get no issue events: grant `view_issue_description` to roles whose webhooks must keep working.
+- API clients of `GET /issues.json` / `.xml` and CSV/Atom exports: the description is now `null`/empty for issues the user may not open. Integrations that read descriptions from the index need a user with `view_issue_description` (or admin).
+- MariaDB: check the production server version. On 10.11.14 the core project issue list can come back empty for members of public projects with "all issues" visibility (finding 9). Run `docs/findings/mariadb-10.11-semijoin.sql` on the production server version: if the first count is 0, set `optimizer_switch: "semijoin=off"` under `variables:` in `config/database.yml` (or in the server config) or upgrade MariaDB. PostgreSQL is not affected.
+- As before (README): roles need `view_activities` for the activity tab.
 
 ## How to test
 
@@ -185,6 +218,53 @@ results quoted in the analysis come from it.
 - No new failure when run together with the other GEOxyz plugins.
 - "After the upgrade" lists every action production needs; "Status" is current.
 
+
+## Baseline (before any change, 2026-10-06)
+
+- Redmine 7.0-stable-GEOxyz, PostgreSQL, plugin at `8a43e9c` (= main code): rspec 120 examples, 0 failures. Note: the specs are plain RSpec with stubs; they do not touch the database. The Rails tests in `test/` (added in this session) do.
+- Real Redmine (production mode) + browser: smoke 13 screenshots, 0 problems; core flows 1 problem: `/issues/1 as reporter: HTTP 403` - intended plugin behaviour (reporter has no view_issue_description); `e2e.sh` now expects 403 there (`RMP_CORE_REPORTER_ISSUE_STATUS`).
+
+## Inventory of functions
+
+| function | how a user reaches it | scenario | screenshots |
+|---|---|---|---|
+| Issue page gate (show, edit, update, API show) | `/issues/:id`, `/edit`, PATCH, `.json` | `issue_access.mjs`, `test/integration/issue_detail_refusal_test.rb` | `issue_access-*.png` (manager show/edit, reporter 403 page/edit/API+PATCH, assignee path, watcher path + refusal, outsider) |
+| Permissions `view_issue_description`, `view_watched_issues` per tracker (Deface on roles/_form) | Administration, Roles | `role_form.mjs` | `role_form-tracker-columns`, `-saved`, `-no-view-issues` |
+| Watched issues visible beyond role visibility (`visible?`, `visible_condition`) | issue list, issue page | `watched_issues.mjs`, specs | `watched_issues-list`, `-self-watch-refused`, `-manager-watch` |
+| Self-watch block without detail access | Watch link, `POST /watchers/watch` | `watched_issues.mjs`, specs | `watched_issues-self-watch-refused` |
+| Watcher candidates only with `view_watched_issues`, paginated, search (Deface on watchers/_new, autocomplete_for_user) | Add watchers modal | `watchers_modal.mjs` | `watchers_modal-page1`, `-page1-again`, `-page2`, `-search`, `-search-empty`, `-back-to-page1`, `-added` |
+| `view_activities` / `view_activities_global` (menus, 403) | Activity tab, `/activity` | `activities.mjs`, specs | `activities-*.png` |
+| Description column offered only with permission (QueryPatch) | issue list options | `description_lists.mjs`, specs | `description_lists-reporter` |
+| Description in lists only for openable issues (new) | list column, CSV, Atom, `/issues.json`, `.xml` | `description_lists.mjs`, `issues_api_index_description_test.rb` | `description_lists-manager`, `-scoped`, `-scoped-csv`, `-reporter-api-index` |
+| API `include=changesets_new` | `/issues/:id.json`, `.xml` | `api_includes.mjs` | `api_includes-changesets-json`, `-changesets-xml`, `-no-include` |
+| API `include=helpdesk_ticket`, `journal_messages` | `/issues/:id.json`, `.xml` with helpdesk | `helpdesk_api.mjs`, `issues_api_helpdesk_test.rb` | `helpdesk_api-plugins`, `-ticket-json`, `-ticket-xml` |
+| Webhooks only to owners with detail access (new, Redmine 7) | My account, Webhooks | `webhooks.mjs`, `webhook_issue_detail_test.rb` | `webhooks-hookuser-hooks`, `-manager-new`, `-manager-hooks`, `-deliveries` |
+| Plugin stylesheet (watcher pagination) | every page head | smoke (no missing assets) | `smoke-*.png`, `watchers_modal-*` |
+
+No settings page, routes of its own, mail handling, rake tasks or cron jobs.
+
+## Results
+
+| run | rspec (spec/) | Rails tests (test/) | e2e (`.codex/e2e.sh`) |
+|---|---|---|---|
+| 7.0-stable-GEOxyz, PostgreSQL 16, plugin alone | 124 examples, 0 failures | 22 runs, 64 assertions, 0 failures, 5 skips (helpdesk absent) | 12 scripts (smoke, core, 10 scenarios), 0 problems (helpdesk_api not applicable) |
+| 7.0-stable-GEOxyz, PostgreSQL 16, with redmine_contacts + helpdesk 4.3.1 | 124 examples, 0 failures | 22 runs, 77 assertions, 0 failures, 0 skips | 12 scripts, 62 screenshots, 0 problems (`docs/e2e/`) |
+| 7.0-stable-GEOxyz, MariaDB 10.11.14, with contacts + helpdesk | 124 examples, 0 failures | 22 runs, 77 assertions, 0 failures, 0 skips (default optimizer_switch) | 12 scripts, 62 screenshots, 0 problems with `semijoin=off` (`docs/e2e/mariadb/`); without it description_lists failed on core's query (finding 9) |
+| 5.1-stable, PostgreSQL, plugin alone | 124 examples, 0 failures | 22 runs, 50 assertions, 0 failures, 10 skips (no webhooks in 5.1, helpdesk absent) | 7 scenarios (no webhooks/helpdesk): green except 2 search steps of watchers_modal, a 5.1 core limitation (`docs/e2e/redmine51/`) |
+| 5.1-stable, main code (before) | | | `docs/e2e/before/`: description_lists 5 problems (descriptions leak), watchers_modal 4 problems (checks lost), issue_access 0 |
+
+Boot and eager load: the production server (eager loading) started on every run; plugin migrations: none (nothing to run down/up). Smoke lists 2 plugin GET routes now (activities); show/edit are no longer method overrides.
+
+Reviews: own adversarial review of the diff (performance of the per-issue check noted, then confirmed by OpenAI). OpenAI (`gpt-5`): `docs/reviews/openai-2026-10-06-a5a8057.md`, 1 finding (N+1 in the list check), fixed in a397f23 with a test; rerun `docs/reviews/openai-2026-10-06-c2fd015.md`: no findings.
+
+Not testable here: nothing of this plugin needs external credentials. Real mail delivery not tested (file delivery only).
+
+## Open questions for Jan
+
+1. **Webhooks**: built (a) drop the issue hook for an owner who may not open the issue. Alternatives: (b) still send, without description and journal; (c) leave the plugin alone and never grant `use_webhooks` to roles without `view_issue_description`. Recommendation: (a), it matches the issue page (refused as a whole) and needs no role discipline.
+2. **Lists**: built: the description is `null` (API) / empty (CSV, Atom, column) for issues the user may not open; the issue itself stays in the list, as before. Alternative: omit the key in the API. Recommendation: keep `null`, the response shape stays core's.
+3. **Other description leaks (finding 10)**: search results (`/search`, `/search.json`), the activity stream and possibly notification mails still show the description to users who may not open the issue. Options: fix in a follow-up on this branch (patch the issue event description for search/activity, review mail recipients), or accept. Recommendation: follow-up change with its own tests, at least for search, since any member with `view_issues` can use it.
+4. **MariaDB** (finding 9): which MariaDB version runs production? If 10.11.x, run the reproduction; recommendation `optimizer_switch=semijoin=off` until MariaDB is upgraded.
 
 ## Analysis report (2026-10-06, Dutch)
 
