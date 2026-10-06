@@ -67,7 +67,27 @@
 $(document).off('click.vid_watchers', '#users_for_watcher .watchers-pagination a');
 $(document).on('click.vid_watchers', '#users_for_watcher .watchers-pagination a', function(event) {
 event.preventDefault();
-$('#users_for_watcher').load(this.href);
+// Keep the users checked on other pages: they are posted as hidden fields,
+// the same way Redmine 7 keeps them across a search (checkboxSelector).
+var $target = $('#users_for_watcher');
+var $form = $target.closest('form');
+var selector = 'input[name="watcher[user_ids][]"]';
+var checked = {};
+$form.find(selector + '.hidden-checked-value').each(function() { checked[$(this).val()] = true; });
+$target.find(selector).each(function() {
+  if ($(this).prop('checked')) { checked[$(this).val()] = true; } else { delete checked[$(this).val()]; }
+});
+$target.load(this.href, function() {
+  $form.find(selector + '.hidden-checked-value').remove();
+  $.each(checked, function(value) {
+    var $box = $target.find(selector).filter(function() { return $(this).val() === value; });
+    if ($box.length) {
+      $box.prop('checked', true);
+    } else {
+      $form.append($('<input type="hidden" class="hidden-checked-value">').attr('name', 'watcher[user_ids][]').val(value));
+    }
+  });
+});
 });
 JS
 %>
