@@ -51,7 +51,8 @@ SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
 
 if [ "$RMP_DB" = mariadb ] || [ "$RMP_DB" = mysql ]; then
   # System deps (Ubuntu/Debian)
-  command -v mysqld >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y build-essential libmariadb-dev mariadb-server nodejs; }
+  { command -v mysqld >/dev/null 2>&1 && [ -f /usr/include/mariadb/mysql.h ]; } ||
+    { $SUDO apt-get update; $SUDO apt-get install -y build-essential libmariadb-dev mariadb-server nodejs; }
 
   # Start MariaDB (no systemd in containers: fall back to mysqld_safe)
   if ! $SUDO mysql -e 'SELECT 1' >/dev/null 2>&1; then
@@ -82,7 +83,8 @@ test:
 EOF
 else
   # System deps (Ubuntu/Debian)
-  command -v psql >/dev/null 2>&1 || { $SUDO apt-get update; $SUDO apt-get install -y build-essential libpq-dev nodejs postgresql postgresql-contrib; }
+  { command -v psql >/dev/null 2>&1 && [ -f /usr/include/postgresql/libpq-fe.h ]; } ||
+    { $SUDO apt-get update; $SUDO apt-get install -y build-essential libpq-dev nodejs postgresql postgresql-contrib; }
 
   # Start postgres
   $SUDO service postgresql start

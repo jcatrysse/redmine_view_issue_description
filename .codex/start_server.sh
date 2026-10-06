@@ -96,6 +96,13 @@ if [ "$adapter" = mysql2 ] && [ -n "${grant:-}" ]; then
   [ "$reset" = 1 ] && create="DROP DATABASE IF EXISTS \`${RMP_SERVER_DB_NAME}\`; $create"
   $SUDO mysql -e "$create" 2>/dev/null ||
     mysql -h "$host" -P "$port" -uroot -p"$password" -e "$create" 2>/dev/null || true
+elif [ "$adapter" = postgresql ] && command -v psql >/dev/null 2>&1; then
+  # Same for PostgreSQL: drop and create the e2e database with the client tools.
+  pg_owner="$(run ruby -ryaml -e 'print YAML.load_file("config/database.yml", aliases: true)["test"]["username"]')"
+  PGSUDO="sudo -u postgres"
+  if [ "$reset" = 1 ]; then $PGSUDO dropdb --if-exists "$RMP_SERVER_DB_NAME" || true; fi
+  $PGSUDO psql -tAc "SELECT 1 FROM pg_database WHERE datname='$RMP_SERVER_DB_NAME'" | grep -q 1 ||
+    $PGSUDO createdb -O "$pg_owner" "$RMP_SERVER_DB_NAME" || true
 elif [ "$reset" = 1 ]; then
   DISABLE_DATABASE_ENVIRONMENT_CHECK=1 run bundle exec rake db:drop || true
 fi
