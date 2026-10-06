@@ -404,4 +404,53 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuesControllerPatch::Inst
       expect(controller.send(:vid_helpdesk_access?)).to be(false)
     end
   end
+
+  # ── helpdesk contact (helpdesk 4.3 renamed #customer to #contact) ────────
+
+  describe 'helpdesk ticket contact' do
+    before { require 'active_support/core_ext/object/blank' }
+
+    def make_ticket(contact_method)
+      contact = Struct.new(:name).new('Jane Contact')
+      issue = Struct.new(:id, :description, :journal_messages).new(7, 'Ticket text', [])
+      ticket = Object.new
+      ticket.define_singleton_method(:issue) { issue }
+      ticket.define_singleton_method(:contact_id) { 42 }
+      ticket.define_singleton_method(contact_method) { contact }
+      %i[from_address to_address cc_address message_id ticket_date ticket_source_name is_incoming
+         reaction_time first_response_time resolve_time last_agent_response_at
+         last_customer_response_at vote vote_comment message_file].each do |m|
+        ticket.define_singleton_method(m) { nil }
+      end
+      ticket
+    end
+
+    %i[contact customer].each do |contact_method|
+      it "puts the contact in the JSON hash when the ticket has ##{contact_method}" do
+        issue = make_issue
+        ticket = make_ticket(contact_method)
+        issue.define_singleton_method(:helpdesk_ticket) { ticket }
+        controller.instance_variable_set(:@issue, issue)
+
+        data = controller.send(:vid_helpdesk_hash)
+
+        expect(data['contact']).to eq('id' => 42, 'name' => 'Jane Contact')
+      end
+
+      it "puts the contact in the XML when the ticket has ##{contact_method}" do
+        require 'nokogiri'
+        issue = make_issue
+        ticket = make_ticket(contact_method)
+        issue.define_singleton_method(:helpdesk_ticket) { ticket }
+        controller.instance_variable_set(:@issue, issue)
+        doc = Nokogiri::XML('<issue/>')
+
+        controller.send(:vid_add_helpdesk_xml, doc.root, doc)
+
+        node = doc.at_xpath('/issue/helpdesk_ticket/contact')
+        expect(node['id']).to eq('42')
+        expect(node['name']).to eq('Jane Contact')
+      end
+    end
+  end
 end

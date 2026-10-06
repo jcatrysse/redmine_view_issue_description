@@ -158,8 +158,9 @@ module RedmineViewIssueDescription
             'vote_comment' => ticket.vote_comment
           }
 
-          if ticket.customer.present?
-            data['contact'] = { 'id' => ticket.contact_id, 'name' => ticket.customer.name }
+          contact = vid_ticket_contact(ticket)
+          if contact.present?
+            data['contact'] = { 'id' => ticket.contact_id, 'name' => contact.name }
           end
 
           if ticket.message_file.present?
@@ -177,6 +178,12 @@ module RedmineViewIssueDescription
           end
 
           data
+        end
+
+        # Helpdesk 4.3 renamed HelpdeskTicket#customer to #contact; older
+        # releases only have #customer.
+        def vid_ticket_contact(ticket)
+          ticket.respond_to?(:contact) ? ticket.contact : ticket.customer
         end
 
         def vid_journal_message_hash(jm)
@@ -273,8 +280,9 @@ module RedmineViewIssueDescription
           ht.add_child(vid_xml_text(doc, 'last_agent_response_at', vid_format_date(ticket.last_agent_response_at) || ''))
           ht.add_child(vid_xml_text(doc, 'last_customer_response_at', vid_format_date(ticket.last_customer_response_at) || ''))
 
-          if ticket.customer.present?
-            ht.add_child(vid_xml_attrs(doc, 'contact', 'id' => ticket.contact_id.to_s, 'name' => ticket.customer.name))
+          contact = vid_ticket_contact(ticket)
+          if contact.present?
+            ht.add_child(vid_xml_attrs(doc, 'contact', 'id' => ticket.contact_id.to_s, 'name' => contact.name))
           end
 
           ht.add_child(vid_xml_text(doc, 'vote', ticket.vote))
