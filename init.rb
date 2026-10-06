@@ -42,6 +42,7 @@ Rails.application.config.after_initialize do
   require_relative 'lib/redmine_view_issue_description/patches/issues_controller_patch'
   require_relative 'lib/redmine_view_issue_description/patches/watchers_controller_patch'
   require_relative 'lib/redmine_view_issue_description/patches/activities_controller_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/webhook_patch'
   require_relative 'lib/redmine_view_issue_description/overrides/role_form_override'
   require_relative 'lib/redmine_view_issue_description/overrides/watchers_pagination_override'
 
