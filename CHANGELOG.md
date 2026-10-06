@@ -1,5 +1,27 @@
 # CHANGELOG
 
+### 0.3.0
+* Redmine 7 support (7.0-stable-GEOxyz, Rails 8.1); still runs on Redmine 5.1.
+* Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
+  open the issue (admin, `view_issue_description`, assignee, watcher with
+  `view_watched_issues`). The webhook payload carries the description and the
+  journal, which the issue page refuses to the other users.
+* Issue lists no longer show the description of issues the user may not open:
+  HTML description column, CSV, PDF, Atom and `GET /issues.json` / `.xml`
+  (the description reads `null` there). Before, the column was only hidden as a
+  whole per project, so a tracker-scoped grant or the API index still exposed
+  every description.
+* The issue page (show, edit, update) is refused in a `before_action`. A refused
+  update no longer runs the `after_action`s of other plugins (helpdesk answered
+  500 instead of 403).
+* Helpdesk 4.3: the `helpdesk_ticket` API section reads the contact through
+  `HelpdeskTicket#contact` (renamed from `#customer`); the section disappeared
+  with helpdesk 4.3.x.
+* Add watchers modal: users checked on one page of candidates stay checked on
+  another page.
+* Rails tests against a real database (`test/`) and browser scenarios
+  (`test/e2e/`) next to the RSpec specs.
+
 ### 0.2.2
 * Fixed cross-project leak in `Issue.visible_condition`: the watcher clause is
   OR'ed outside the condition returned by core, which is where the caller's

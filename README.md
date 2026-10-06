@@ -16,6 +16,8 @@ Some extra features have been added to improve the general usability.
     * `view_activities`: controls access to the project activity tab.
 1. Global permission:
     * `view_activities_global`: controls access to the application-wide activity overview.
+1. Issue lists (description column, CSV, PDF, Atom, `GET /issues.json` and `.xml`) only show the description of issues the user may open; for the others it is empty (`null` in the API).
+1. Redmine 7 webhooks: issue events are only sent to webhooks whose owner may open the issue.
 1. API calls on `issues` have been extended with:
     * `repository` information when using `include=changesets_new`
     * `helpdesk_ticket` information if the `RedmineUP` helpdesk plugin is installed.
@@ -56,6 +58,14 @@ The plugin includes an RSpec test suite for the visibility logic. Run the full s
 RAILS_ENV=test bundle exec rspec plugins/redmine_view_issue_description/spec
 ```
 
+Rails tests against a real database (Redmine fixtures; webhook tests need Redmine 7, helpdesk tests need redmine_contacts_helpdesk):
+
+```
+RAILS_ENV=test bundle exec rake redmine:plugins:test NAME=redmine_view_issue_description
+```
+
+Browser scenarios for every function are in `test/e2e/` (see `.codex/e2e.sh`).
+
 ## Compatibility
 
-Tested on Redmine 5.1 and 6.0.
+Tested on Redmine 7.0 (7.0-stable-GEOxyz) with PostgreSQL and MariaDB, and on Redmine 5.1.
