@@ -48,7 +48,10 @@ class MailerDescriptionTest < ActiveSupport::TestCase
 
     mail = Mailer.issue_edit(@dlopper, journal).deliver_now
 
-    assert_includes mail_text(mail), 'Vidmail note'
+    # The change itself is still reported; the note is hidden too since round 3
+    # of Jan's decisions (mailer_notes_attachments_test.rb).
+    assert_includes mail_text(mail), 'Vidmail issue changed'
+    assert_not_includes mail_text(mail), 'Vidmail note'
     assert_not_includes mail_text(mail), 'Vidmail secret'
   end
 

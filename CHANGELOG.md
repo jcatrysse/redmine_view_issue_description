@@ -8,8 +8,9 @@
   and attachments.
 * The activity stream (project and global, HTML and Atom) no longer shows the
   description of a new issue the user may not open; the event itself stays.
-* Issue notification mails (new issue, update) leave the description out for a
-  recipient who may not open the issue; the mail is still sent.
+* Issue notification mails (new issue, update) leave the description, the notes
+  and the attachment names out for a recipient who may not open the issue; the
+  mail is still sent.
 * The diff of a description change (`/journals/:id/diff`) and quoting the issue
   description in a reply (`POST /issues/:id/quoted`) are refused (403) to users
   who may not open the issue.

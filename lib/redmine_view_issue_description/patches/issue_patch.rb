@@ -90,6 +90,20 @@ module RedmineViewIssueDescription
           @vid_description_hidden == true
         end
 
+        # Hides the attachments of this loaded record (their names), for an issue
+        # mail to a recipient who may not open the issue. Never saved.
+        def vid_hide_attachments!(hidden = true)
+          @vid_attachments_hidden = hidden
+        end
+
+        def vid_attachments_hidden?
+          @vid_attachments_hidden == true
+        end
+
+        def attachments
+          @vid_attachments_hidden ? Attachment.none : super
+        end
+
         def description
           @vid_description_hidden ? nil : super
         end
