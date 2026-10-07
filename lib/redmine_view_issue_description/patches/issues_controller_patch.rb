@@ -41,6 +41,13 @@ module RedmineViewIssueDescription
           render_403 unless vid_description_access?
         end
 
+        # before_action on new and create, after core's build_new_issue_from_params.
+        # Copying an issue fills the new issue with its description, so a source
+        # the user may not open is refused, as its page is.
+        def vid_authorize_copy
+          render_403 if @copy_from && !@copy_from.detail_access_granted?(User.current)
+        end
+
         # Returns true when the current user may access the issue description/detail page.
         # Paths to access:
         #   1. Global admin
@@ -383,5 +390,6 @@ end
 IssuesController.include(RedmineViewIssueDescription::Patches::IssuesControllerPatch::InstanceMethods)
 IssuesController.class_eval do
   before_action :vid_authorize_issue_detail, only: [:show, :edit, :update]
+  before_action :vid_authorize_copy, only: [:new, :create]
   after_action :inject_vid_api_sections, only: [:show]
 end

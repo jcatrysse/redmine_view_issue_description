@@ -13,6 +13,9 @@
 * The diff of a description change (`/journals/:id/diff`) and quoting the issue
   description in a reply (`POST /issues/:id/quoted`) are refused (403) to users
   who may not open the issue.
+* Copying an issue (`/projects/:id/issues/:copy_from/copy` and the create that
+  follows) is refused (403) when the user may not open the source issue: the
+  copy form is filled with its description.
 * Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
   open the issue (admin, `view_issue_description`, assignee, watcher with
   `view_watched_issues`). The webhook payload carries the description and the
