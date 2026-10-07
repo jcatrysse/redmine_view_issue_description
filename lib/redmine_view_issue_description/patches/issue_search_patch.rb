@@ -54,13 +54,6 @@ module RedmineViewIssueDescription
       ensure
         Thread.current[:vid_search_without_description] = previous
       end
-
-      def vid_openable_ids(issues, user)
-        ActiveRecord::Associations::Preloader.new(
-          records: issues, associations: [:project, :tracker, :assigned_to, :watcher_users]
-        ).call
-        issues.select { |issue| issue.detail_access_granted?(user) }.map(&:id)
-      end
     end
   end
 end

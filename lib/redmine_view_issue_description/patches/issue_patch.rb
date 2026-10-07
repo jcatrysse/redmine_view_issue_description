@@ -153,6 +153,17 @@ module RedmineViewIssueDescription
       end
 
       module ClassMethods
+        # Ids of the given loaded issues that the user may open (#detail_access_granted?),
+        # with what that check reads preloaded in one query each.
+        def vid_openable_ids(issues, user)
+          return issues.map(&:id) if user.admin?
+
+          ActiveRecord::Associations::Preloader.new(
+            records: issues, associations: [:project, :tracker, :assigned_to, :watcher_users]
+          ).call
+          issues.select { |issue| issue.detail_access_granted?(user) }.map(&:id)
+        end
+
         def visible_condition_with_vid(user, options = {})
           base_condition = visible_condition_without_vid(user, options)
 
