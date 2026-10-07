@@ -48,6 +48,21 @@ module RedmineViewIssueDescription
           render_403 if @copy_from && !@copy_from.detail_access_granted?(User.current)
         end
 
+        # before_action on bulk_update (context menu, bulk edit and bulk copy), after
+        # core's find_issues. The assignee may always open an issue, so assigning an
+        # issue the user may not open to themselves (or to a group of theirs) would
+        # open it; that one change is refused, as the edit form is.
+        def vid_authorize_self_assignment
+          assignee_id = params[:issue].respond_to?(:[]) ? params[:issue][:assigned_to_id].to_s : ''
+          return if assignee_id.blank? || assignee_id == 'none'
+
+          user = User.current
+          assignee = Principal.find_by(id: assignee_id.to_i)
+          return unless assignee && user.is_or_belongs_to?(assignee)
+
+          render_403 if @issues.any? { |issue| !issue.detail_access_granted?(user) }
+        end
+
         # Returns true when the current user may access the issue description/detail page.
         # Paths to access:
         #   1. Global admin
@@ -391,5 +406,6 @@ IssuesController.include(RedmineViewIssueDescription::Patches::IssuesControllerP
 IssuesController.class_eval do
   before_action :vid_authorize_issue_detail, only: [:show, :edit, :update]
   before_action :vid_authorize_copy, only: [:new, :create]
+  before_action :vid_authorize_self_assignment, only: [:bulk_update]
   after_action :inject_vid_api_sections, only: [:show]
 end

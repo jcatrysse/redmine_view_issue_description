@@ -16,6 +16,9 @@
 * Copying an issue (`/projects/:id/issues/:copy_from/copy` and the create that
   follows) is refused (403) when the user may not open the source issue: the
   copy form is filled with its description.
+* Bulk edit and the context menu refuse (403) assigning an issue the user may
+  not open to themselves or to a group of theirs: as assignee they could then
+  open it. Other bulk changes are unchanged.
 * Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
   open the issue (admin, `view_issue_description`, assignee, watcher with
   `view_watched_issues`). The webhook payload carries the description and the
