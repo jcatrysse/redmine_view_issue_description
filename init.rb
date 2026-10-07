@@ -44,6 +44,7 @@ Rails.application.config.after_initialize do
   require_relative 'lib/redmine_view_issue_description/patches/issue_activity_patch'
   require_relative 'lib/redmine_view_issue_description/patches/mailer_patch'
   require_relative 'lib/redmine_view_issue_description/patches/issues_controller_patch'
+  require_relative 'lib/redmine_view_issue_description/patches/journals_controller_patch'
   require_relative 'lib/redmine_view_issue_description/patches/watchers_controller_patch'
   require_relative 'lib/redmine_view_issue_description/patches/activities_controller_patch'
   require_relative 'lib/redmine_view_issue_description/patches/webhook_patch'

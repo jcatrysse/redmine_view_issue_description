@@ -10,6 +10,9 @@
   description of a new issue the user may not open; the event itself stays.
 * Issue notification mails (new issue, update) leave the description out for a
   recipient who may not open the issue; the mail is still sent.
+* The diff of a description change (`/journals/:id/diff`) and quoting the issue
+  description in a reply (`POST /issues/:id/quoted`) are refused (403) to users
+  who may not open the issue.
 * Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
   open the issue (admin, `view_issue_description`, assignee, watcher with
   `view_watched_issues`). The webhook payload carries the description and the
