@@ -1,7 +1,11 @@
 # CHANGELOG
 
 ### 0.3.0
-* Redmine 7 support (7.0-stable-GEOxyz, Rails 8.1); still runs on Redmine 5.1.
+* Redmine 7 support (7.0-stable-GEOxyz, Rails 8.1).
+* Search (`/search`, `/search.json`) no longer shows the description of an
+  issue the user may not open, and no longer finds such an issue through a word
+  of its description; it stays findable by its subject, notes, custom fields
+  and attachments.
 * Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
   open the issue (admin, `view_issue_description`, assignee, watcher with
   `view_watched_issues`). The webhook payload carries the description and the
