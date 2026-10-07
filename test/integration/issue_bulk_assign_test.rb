@@ -34,6 +34,12 @@ class IssueBulkAssignTest < Redmine::IntegrationTest
     assert_response :forbidden
   end
 
+  test '"me" is refused the same way and assigns nothing' do
+    post '/issues/bulk_update', params: { ids: [@issue.id], issue: { assigned_to_id: 'me' } }
+    assert_response :forbidden
+    assert_nil @issue.reload.assigned_to_id
+  end
+
   test 'a group the user belongs to counts as themselves' do
     group = Group.find(10)
     group.users << @dlopper unless group.users.include?(@dlopper)

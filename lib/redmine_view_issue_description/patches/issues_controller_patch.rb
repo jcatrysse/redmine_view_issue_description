@@ -57,7 +57,8 @@ module RedmineViewIssueDescription
           return if assignee_id.blank? || assignee_id == 'none'
 
           user = User.current
-          assignee = Principal.find_by(id: assignee_id.to_i)
+          # 'me' is the current user in core's update and new; treat it alike here.
+          assignee = assignee_id == 'me' ? user : Principal.find_by(id: assignee_id.to_i)
           return unless assignee && user.is_or_belongs_to?(assignee)
 
           render_403 if @issues.any? { |issue| !issue.detail_access_granted?(user) }
