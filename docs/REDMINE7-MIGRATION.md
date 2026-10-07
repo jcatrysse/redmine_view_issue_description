@@ -4,7 +4,7 @@ Start a Claude Code (or Codex) session on this repository, branch `redmine70-mig
 
 > Read CLAUDE.md and docs/REDMINE7-MIGRATION.md, then carry out the Redmine 7 migration of this
 > plugin as described there, on branch redmine70-migration. That includes the plugin's tests on
-> PostgreSQL and MariaDB, every function exercised end to end on a real running Redmine in a
+> PostgreSQL, every function exercised end to end on a real running Redmine in a
 > browser (with and without permissions, failure paths included) with screenshots you looked at,
 > and an OpenAI review of the diff when OPENAI_API_KEY is set. Report to me in Dutch at the end.
 
@@ -73,7 +73,7 @@ In this order: things that break, security, the GEOxyz changes, the open items, 
 **Found during the session**
 
 8. With redmine_contacts_helpdesk installed, a refused `PATCH /issues/:id` answered 500 (helpdesk's `after_action :flash_helpdesk` reads `@issue.current_journal`, which a refused update never built). **Fixed** (badf0c3): the refusal is a `before_action`, which halts the chain. Test `test/integration/issue_detail_refusal_test.rb` (fails on the old code). The helpdesk after_action itself (`current_journal.is_send_note` without nil check) could get a guard in redmine_contacts_helpdesk as well; not changed there.
-9. MariaDB 10.11.14 returns no rows for Redmine core's `Issue.visible_condition` with a project (project issue list) for a member of a public project whose role sees all issues; PostgreSQL returns them. Not this plugin's SQL. Standalone reproduction `docs/findings/mariadb-10.11-semijoin.sql` (0, and 8 with `optimizer_switch='semijoin=off'`); failing run kept in `docs/findings/`. See "After the upgrade".
+9. MariaDB 10.11.14 returns no rows for Redmine core's `Issue.visible_condition` with a project (project issue list) for a member of a public project whose role sees all issues; PostgreSQL returns them. Not this plugin's SQL. Standalone reproduction `docs/findings/mariadb-10.11-semijoin.sql` (0, and 8 with `optimizer_switch='semijoin=off'`); failing run kept in `docs/findings/`. Note only: GEOxyz production runs PostgreSQL 16 (Jan, q4: nothing to do).
 10. Pre-existing, not fixed (no item in the work list, larger than a migration fix): the description still reaches users who may not open the issue through `/search` and `/search.json` (measured: reporter gets "Description of E2E second tracker issue" for #8, while `/issues/8` is refused), through the activity stream (event description, only for roles with `view_activities`), and possibly through issue notification mails to members who see but may not open the issue (not measured). See "Open questions for Jan" (3).
 11. Core's own webhook tests (`test/unit/webhook_test.rb`) assume an owner with `view_issues` gets issue hooks; with this plugin installed they would fail for owners without detail access. Intended; only relevant if core tests run with the plugin.
 12. `init.rb` url/author_url still point to redminetrustteam (analysis remark); left unchanged.
@@ -89,12 +89,11 @@ Actions the person doing the upgrade must take, or know about, for this plugin:
 - `bundle install` (deface 1.9.0 resolves next to Rails 8.1); no plugin migrations; restart.
 - Webhooks (if enabled): issue events now reach only hook owners who may open the issue (`view_issue_description`, assignee, or watcher with `view_watched_issues`). Owners that only have `view_issues` + `use_webhooks` get no issue events: grant `view_issue_description` to roles whose webhooks must keep working.
 - API clients of `GET /issues.json` / `.xml` and CSV/Atom exports: the description is now `null`/empty for issues the user may not open. Integrations that read descriptions from the index need a user with `view_issue_description` (or admin).
-- MariaDB: check the production server version. On 10.11.14 the core project issue list can come back empty for members of public projects with "all issues" visibility (finding 9). Run `docs/findings/mariadb-10.11-semijoin.sql` on the production server version: if the first count is 0, set `optimizer_switch: "semijoin=off"` under `variables:` in `config/database.yml` (or in the server config) or upgrade MariaDB. PostgreSQL is not affected.
 - As before (README): roles need `view_activities` for the activity tab.
 
 ## How to test
 
-This repo already has its own `.codex/` scripts (older variant). Read their headers and use them; check they accept `7.0-stable-GEOxyz` (clone from https://github.com/jcatrysse/redmine.git) and MariaDB. The shared variant from the other plugin repos may replace them if that is simpler.
+This repo already has its own `.codex/` scripts (older variant). Read their headers and use them; check they accept `7.0-stable-GEOxyz` (clone from https://github.com/jcatrysse/redmine.git). The shared variant from the other plugin repos may replace them if that is simpler.
 
 Then the real Redmine and the browser checks (shared scripts, they use the checkout in `redmine/` or `REDMINE_DIR`):
 
@@ -118,7 +117,7 @@ results quoted in the analysis come from it.
 1. **Start**: `git fetch && git checkout redmine70-migration && git pull`. Read this whole file,
    including the analysis report at the bottom. Do not reopen decisions recorded here.
 2. **Baseline, before you change anything**:
-   - the plugin's tests on Redmine 7.0-stable-GEOxyz with PostgreSQL and with MariaDB;
+   - the plugin's tests on Redmine 7.0-stable-GEOxyz with PostgreSQL;
    - a real running Redmine with this plugin (`./.codex/start_server.sh`) and the browser run
      (`./.codex/e2e.sh`: smoke over every page the plugin adds, plus the core issue flows).
    Write the numbers here. Something already broken now is a finding, not your regression.
@@ -130,9 +129,9 @@ results quoted in the analysis come from it.
 4. **GEOxyz changes**: go through the table above, one item at a time. Each kept or re-made change
    is its own commit with a test that proves it. Record the verdict in the table.
 5. **Work list**: then the numbered list, in order. One concern per commit.
-6. **Portability**: everything must run on Redmine's supported databases (PostgreSQL,
-   MySQL/MariaDB; SQLite where the plugin already supports it). Migrations must be reversible and
-   are run down and up on PostgreSQL and MariaDB.
+6. **Database**: GEOxyz runs PostgreSQL 16 only (Jan, 2026-10-07). Tests and e2e run on
+   PostgreSQL; keep SQL portable where that costs nothing; a MariaDB-only problem is a note, not a
+   blocker. Migrations must be reversible and are run down and up on PostgreSQL.
 7. **Together**: run with the other GEOxyz plugins installed (the migration kit's harness, or
    `RMP_EXTRA_PLUGINS`). A failure that only appears in combination is a finding to record here.
 8. **End to end, visually, every function**: on the real Redmine from `start_server.sh`
@@ -149,9 +148,8 @@ results quoted in the analysis come from it.
    - Functions without a page (mail in and out, REST API, rake tasks, cron, webhooks): exercise
      them against the same running instance (mails land in `redmine/tmp/mails`, `t.mails()`
      reads them; API through `t.page.request`) and record command and result.
-   - Before pictures where behaviour or layout changes: the branch GEOxyz runs today, on
-     Redmine 5.1, same scenarios, `RMP_E2E_OUT=docs/e2e/before`.
-   - Run the whole e2e set once on MariaDB as well (`RMP_DB=mariadb`, then `start_server.sh --reset`).
+   - Before pictures where behaviour or layout changes: the code before the change, same
+     scenarios, `RMP_E2E_OUT=docs/e2e/before`.
 9. **Independent review**: first your own, adversarial: re-read the whole diff as if someone
    else wrote it and you are paid to reject it. Then, **when `OPENAI_API_KEY` is set in the
    session**, `./.codex/openai_review.sh`: it sends the diff of this branch to an OpenAI model
@@ -162,7 +160,7 @@ results quoted in the analysis come from it.
 10. **After the upgrade**: anything the production upgrade must do for this plugin (data fixes,
     settings, cron, files, removed features) goes into the section "After the upgrade".
 11. **Finish**: update "Status", the inventory and the work list in this file, push
-    `redmine70-migration`, and report: what changed, test numbers on both databases, e2e
+    `redmine70-migration`, and report: what changed, test numbers on PostgreSQL, e2e
     numbers (scenarios, screenshots, problems), the review result, what is left, what needs Jan.
 
 ### Stop and ask Jan when
@@ -196,8 +194,10 @@ results quoted in the analysis come from it.
   (on by default: `t.sudo()` in a scenario). The breaker list is in the migration kit's CHECKLIST.md.
 - **Locales**: keep the locales the plugin ships in sync; translate a new key by matching the
   closest existing key in the same file, not from scratch; do not add new languages.
-- **5.1 compatibility**: prefer fixes that also run on Redmine 5.1 so they can be merged early;
-  say so when a fix cannot.
+- **Redmine 7 only** (Jan, 2026-10-07): no 5.1 compatibility, no code paths that exist only for 5.1,
+  nothing cherry-picked to `main`.
+- **Core patches**: a core method that other installed plugins also patch is patched with
+  `prepend`, never with `alias_method` (mixing both on one method recurses).
 - **Git**: work on `redmine70-migration` only; never push to the default branch; never force-push
   a branch someone else uses. Descriptive commit messages (what and why). Push after every
   commit, together with the updated status in this file: a cloud session can stop at a usage
@@ -208,7 +208,7 @@ results quoted in the analysis come from it.
 ## Definition of done
 
 - All items of the work list are done or explicitly deferred with a reason, in this file.
-- The plugin's tests are green on Redmine 7.0-stable-GEOxyz with PostgreSQL and MariaDB
+- The plugin's tests are green on Redmine 7.0-stable-GEOxyz with PostgreSQL
   (numbers in this file); boot, production-like eager load, migrations up/down OK.
 - Every function in the inventory exercised end to end on a real running Redmine, with and
   without permissions and on its failure paths; `./.codex/e2e.sh` green; screenshots looked at,
@@ -259,12 +259,24 @@ Reviews: own adversarial review of the diff (performance of the per-issue check 
 
 Not testable here: nothing of this plugin needs external credentials. Real mail delivery not tested (file delivery only).
 
-## Open questions for Jan
+## Decided by Jan (2026-10-07)
 
-1. **Webhooks**: built (a) drop the issue hook for an owner who may not open the issue. Alternatives: (b) still send, without description and journal; (c) leave the plugin alone and never grant `use_webhooks` to roles without `view_issue_description`. Recommendation: (a), it matches the issue page (refused as a whole) and needs no role discipline.
-2. **Lists**: built: the description is `null` (API) / empty (CSV, Atom, column) for issues the user may not open; the issue itself stays in the list, as before. Alternative: omit the key in the API. Recommendation: keep `null`, the response shape stays core's.
-3. **Other description leaks (finding 10)**: search results (`/search`, `/search.json`), the activity stream and possibly notification mails still show the description to users who may not open the issue. Options: fix in a follow-up on this branch (patch the issue event description for search/activity, review mail recipients), or accept. Recommendation: follow-up change with its own tests, at least for search, since any member with `view_issues` can use it.
-4. **MariaDB** (finding 9): which MariaDB version runs production? If 10.11.x, run the reproduction; recommendation `optimizer_switch=semijoin=off` until MariaDB is upgraded.
+Jan answered the open questions on 2026-10-07 in the coordinating session
+(https://claude.ai/code/session_01GiSsYPm3bxvqrpZkdCxNoi); recorded as given in
+`docs/DECISIONS-2026-10-07.md` (fdb025c). No open questions remain.
+
+General decisions, for every GEOxyz plugin:
+- **Straight to Redmine 7**: no backports to 5.1, nothing cherry-picked to `main`; `redmine70-migration` goes live with Redmine 7. Redmine 5.1 compatibility is no longer a requirement (rule dropped below). Existing fallbacks on this branch that only matter for 5.1 (helpdesk `customer`, the pre-7.0 `Preloader` call) stay; no new ones are added.
+- **PostgreSQL only**: production runs PostgreSQL 16. Tests and e2e run on PostgreSQL; SQL stays portable where that costs nothing; a MariaDB-only problem is a note, not a blocker.
+- **deface without a version constraint**: the Gemfile already has `gem 'deface'` without one.
+- **`prepend`, never `alias_method`, on a core method other plugins also patch**: checked, see finding 13.
+- **GitHub Actions manual only** (`workflow_dispatch`): unchanged.
+
+Decisions for this plugin:
+1. **q1 Webhooks for owners who may not open the issue**: A, "Niet versturen naar wie het issue niet mag openen (gebouwd)" (Klopt met de issuepagina en vraagt geen discipline bij rollen; zo'n eigenaar krijgt geen issue-events.). Already built (9b446eb), kept.
+2. **q2 Description in lists and the API for issues you may not open**: A, "Leeg ('null'), zelfde vorm als Redmine (gebouwd)" (Koppelingen die de API lezen zien hetzelfde veld, alleen leeg.). Already built (7f2e8b9, a397f23), kept.
+3. **q3 Remaining description leaks (search, activity, mails)**: A, "Oplossen in een vervolgwijziging, minstens zoeken" (Sluit het lek met eigen tests, maar vraagt extra werk na de migratie.). Built on this branch, see work list 14.
+4. **q4 MariaDB 10.11 in production?**: C, "Geen MariaDB 10.11 in productie: niets doen" (Geldt als productie PostgreSQL draait of het script op de productieserver gewoon issues teruggeeft.). Nothing to do: production runs PostgreSQL 16. Finding 9 stays as a note; the MariaDB line under "After the upgrade" is removed.
 
 ## Analysis report (2026-10-06, Dutch)
 
