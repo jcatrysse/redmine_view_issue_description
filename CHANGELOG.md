@@ -8,6 +8,8 @@
   and attachments.
 * The activity stream (project and global, HTML and Atom) no longer shows the
   description of a new issue the user may not open; the event itself stays.
+* Issue notification mails (new issue, update) leave the description out for a
+  recipient who may not open the issue; the mail is still sent.
 * Redmine 7 webhooks: an issue event is only delivered to hooks whose owner may
   open the issue (admin, `view_issue_description`, assignee, watcher with
   `view_watched_issues`). The webhook payload carries the description and the

@@ -82,8 +82,12 @@ module RedmineViewIssueDescription
         # Makes #description return nil on this loaded record only, for lists
         # (issue queries) shown to a user who may not open the issue. The
         # attribute itself is untouched, so a save never writes the nil.
-        def vid_hide_description!
-          @vid_description_hidden = true
+        def vid_hide_description!(hidden = true)
+          @vid_description_hidden = hidden
+        end
+
+        def vid_description_hidden?
+          @vid_description_hidden == true
         end
 
         def description
