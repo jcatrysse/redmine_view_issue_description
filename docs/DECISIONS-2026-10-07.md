@@ -33,3 +33,8 @@ What to do:
 7. Update Status, the inventory, the work list and "After the upgrade". Push `redmine70-migration` after every commit.
 8. These decisions are final; do not stop to ask about them. If one turns out to be impossible, write down why in the plan and carry on with the rest.
 9. End with a short report in Dutch: per decision what you did (commit), test numbers, e2e numbers (scenarios, screenshots, problems), the review result, what is left for Jan.
+
+## Round 3, decided by Jan on 2026-10-07 (late evening)
+
+- viewdesc 5: whoever may not open an issue still sees its notes and attachment names in the update mails and the activity stream; that was outside q3 (description only). Should that be hidden too?
+  Jan chose: "Ja, ook afschermen" (a follow-up step in this plugin: mails and activity no longer show those parts to whoever may not open the issue). Carry this out.
