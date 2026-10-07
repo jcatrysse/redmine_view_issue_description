@@ -38,3 +38,5 @@ What to do:
 
 - viewdesc 5: whoever may not open an issue still sees its notes and attachment names in the update mails and the activity stream; that was outside q3 (description only). Should that be hidden too?
   Jan chose: "Ja, ook afschermen" (a follow-up step in this plugin: mails and activity no longer show those parts to whoever may not open the issue). Carry this out.
+- viewdesc 6: search still finds an issue through a word that only occurs in its notes, also for whoever may not open the issue (the notes are not shown, only that the issue matches).
+  Jan chose: "Nee, zo laten". Nothing to build; record it.
