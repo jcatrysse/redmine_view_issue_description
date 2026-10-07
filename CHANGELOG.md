@@ -8,6 +8,8 @@
   and attachments.
 * The activity stream (project and global, HTML and Atom) no longer shows the
   description of a new issue the user may not open; the event itself stays.
+* The activity stream no longer shows the notes of an issue the user may not
+  open; the update event itself stays.
 * Issue notification mails (new issue, update) leave the description, the notes
   and the attachment names out for a recipient who may not open the issue; the
   mail is still sent.

@@ -26,7 +26,25 @@ module RedmineViewIssueDescription
         @vid_notes_hidden ? details.reject { |detail| detail.property == 'attachment' } : details
       end
     end
+
+    # The activity stream shows each issue update with its notes. For an issue
+    # the user may not open the event stays and its notes are left out.
+    module JournalActivityPatch
+      def find_events(event_type, user, from, to, options)
+        events = super
+        return events if user.admin? || events.empty?
+
+        issues = events.map(&:issue).compact.uniq # preloaded by the activity scope
+        openable = Issue.vid_openable_ids(issues, user)
+        events.each { |journal| journal.vid_hide_notes! unless openable.include?(journal.journalized_id) }
+        events
+      end
+    end
   end
+end
+
+unless Journal.singleton_class.ancestors.include?(RedmineViewIssueDescription::Patches::JournalActivityPatch)
+  Journal.singleton_class.prepend(RedmineViewIssueDescription::Patches::JournalActivityPatch)
 end
 
 unless Journal.ancestors.include?(RedmineViewIssueDescription::Patches::JournalPatch)
