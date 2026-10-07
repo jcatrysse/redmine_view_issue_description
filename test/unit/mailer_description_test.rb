@@ -14,6 +14,10 @@ class MailerDescriptionTest < ActiveSupport::TestCase
            :issues, :enumerations, :watchers, :journals, :journal_details
 
   setup do
+    # config/configuration.yml of the e2e server (start_server.sh) sets :file,
+    # and a test that reloads Redmine::Configuration applies it to this process.
+    @delivery_method = ActionMailer::Base.delivery_method
+    ActionMailer::Base.delivery_method = :test
     ActionMailer::Base.deliveries.clear
     Setting.plain_text_mail = '0'
     @project = Project.find('ecookbook')
@@ -21,6 +25,10 @@ class MailerDescriptionTest < ActiveSupport::TestCase
     @role = Role.find_by_name('Developer')
     @issue = Issue.generate!(project: @project, tracker: Tracker.find(1), author: User.find(1),
                              subject: 'Vidmail issue', description: 'Vidmail secret description')
+  end
+
+  teardown do
+    ActionMailer::Base.delivery_method = @delivery_method
   end
 
   def mail_text(mail)
