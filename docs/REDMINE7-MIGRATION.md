@@ -308,6 +308,8 @@ Reviews 2026-10-07: own adversarial review of fdb025c..HEAD found the bulk self-
 
 Role check (finding 15) on the e2e server, `rails runner` from "After the upgrade": Manager and E2E full `view_issue_description: all`, E2E scoped description `view_issue_description: 1`, Developer, Reporter, E2E watched only, E2E webhooks, E2E reader, Non member, Anonymous `NO view_issue_description`.
 
+Round 3: own review (journal events read the preloaded issue, not `journalized`; hidden notes and attachments restored after each mail, never saved). OpenAI `docs/reviews/openai-2026-10-07-c2e6fb1.md`: 2 findings (attachments_added mail, possible N+1), both checked against core and not applicable, resolutions there.
+
 Earlier reviews: own adversarial review of the diff (performance of the per-issue check noted, then confirmed by OpenAI). OpenAI (`gpt-5`): `docs/reviews/openai-2026-10-06-a5a8057.md`, 1 finding (N+1 in the list check), fixed in a397f23 with a test; rerun `docs/reviews/openai-2026-10-06-c2fd015.md`: no findings.
 
 Not testable here: nothing of this plugin needs external credentials. Real mail delivery not tested (file delivery only).
