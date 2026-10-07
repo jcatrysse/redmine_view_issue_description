@@ -7,6 +7,7 @@ require_relative '../test_helper'
 # mail itself is still sent, as before.
 class MailerDescriptionTest < ActiveSupport::TestCase
   include RedmineViewIssueDescription::TestHelper
+  include ActiveJob::TestHelper
 
   fixtures :projects, :users, :email_addresses, :user_preferences, :members, :member_roles,
            :roles, :trackers, :projects_trackers, :enabled_modules, :issue_statuses,
@@ -71,7 +72,7 @@ class MailerDescriptionTest < ActiveSupport::TestCase
     @dlopper.pref.update!(no_self_notified: false)
     @dlopper.update!(mail_notification: 'all')
     with_settings notified_events: %w(issue_added) do
-      Mailer.deliver_issue_add(@issue) # inline queue in the test environment
+      perform_enqueued_jobs { Mailer.deliver_issue_add(@issue) }
     end
     mail = ActionMailer::Base.deliveries.detect { |m| m.to.include?(@dlopper.mail) }
 
