@@ -18,6 +18,7 @@ Some extra features have been added to improve the general usability.
     * `view_activities_global`: controls access to the application-wide activity overview.
 1. Issue lists (description column, CSV, PDF, Atom, `GET /issues.json` and `.xml`) only show the description of issues the user may open; for the others it is empty (`null` in the API).
 1. Redmine 7 webhooks: issue events are only sent to webhooks whose owner may open the issue.
+1. The description does not reach a user who may not open the issue in other places either: search neither shows nor matches it, the activity stream and the issue notification mails leave it out (the mail is still sent), and the description diff in the history, quoting the issue and copying it answer 403.
 1. API calls on `issues` have been extended with:
     * `repository` information when using `include=changesets_new`
     * `helpdesk_ticket` information if the `RedmineUP` helpdesk plugin is installed.
@@ -26,6 +27,8 @@ Some extra features have been added to improve the general usability.
 The tracker-level checkboxes for `view_issue_description` and `view_watched_issues` are injected into the role form via a Deface override so upgrades to Redmine core do not require copying the entire partial.
 
 > **Note on assignee access**: users assigned to an issue always have access to the issue detail page, regardless of their role's `view_issue_description` setting. This is intentional — assignees must be able to see the issue they are working on.
+
+> **Install note**: on a Redmine where this plugin is installed for the first time, members whose roles lack `view_issue_description` can no longer open issues (403 on the issue page, its edit form and the API show), except as assignee or as watcher with `view_watched_issues`. Grant `view_issue_description` to the roles that must open issues. Upgrading from an earlier version of this plugin changes no role; the plugin has no migrations.
 
 > **Upgrade note**: after installing the plugin, existing roles will no longer have access to the project activity tab until `view_activities` is explicitly granted. Assign this permission to all roles that previously had unrestricted activity access.
 
@@ -68,4 +71,4 @@ Browser scenarios for every function are in `test/e2e/` (see `.codex/e2e.sh`).
 
 ## Compatibility
 
-Tested on Redmine 7.0 (7.0-stable-GEOxyz) with PostgreSQL and MariaDB, and on Redmine 5.1.
+Tested on Redmine 7.0 (7.0-stable-GEOxyz) with PostgreSQL 16. Redmine 5.1 and MariaDB are no longer tested.

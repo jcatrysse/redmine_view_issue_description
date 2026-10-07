@@ -10,6 +10,12 @@
 #                         for the first tracker only.
 #   hookuser              role "E2E webhooks": view_issues + use_webhooks, no
 #                         plugin permission; owns a webhook on e2e-project.
+#   reader                role "E2E reader": view_issues, view_activities,
+#                         add_issues, copy_issues, add_issue_notes, no
+#                         view_issue_description; notified of every event
+#                         (scoped as well), for the description leaks of q3.
+# "E2E search issue": a description with words found nowhere else, changed once,
+# so its history holds a description diff.
 # A git repository "e2e" with a commit that refers to the assigned issue, for
 # the include=changesets_new API.
 password = ENV.fetch('RMP_USER_PASSWORD', ENV.fetch('RMP_ADMIN_PASSWORD', 'Redmine7Test!'))
@@ -60,6 +66,9 @@ end
 vid_member(vid_user('scoped', 'Scoped', password), project, scoped)
 hookuser = vid_user('hookuser', 'Hook', password)
 vid_member(hookuser, project, hooks)
+reader = vid_user('reader', 'Reader', password)
+vid_member(reader, project, vid_role('E2E reader', %i[view_issues view_activities add_issues copy_issues add_issue_notes]))
+[reader, User.find_by!(login: 'scoped')].each { |user| user.update!(mail_notification: 'all') }
 
 unassigned = Issue.find_by!(project_id: project.id, subject: 'E2E unassigned issue')
 Watcher.create!(watchable: unassigned, user: watchers.first) unless unassigned.watched_by?(watchers.first)
@@ -72,6 +81,15 @@ Watcher.create!(watchable: unassigned, user: watchers.first) unless unassigned.w
   Issue.create!(project: project, tracker: tracker, subject: subject, author: User.current,
                 priority: IssuePriority.default || IssuePriority.first, status: tracker.default_status,
                 description: "Description of #{subject}")
+end
+
+unless Issue.where(project_id: project.id, subject: 'E2E search issue').exists?
+  search_issue = Issue.create!(project: project, tracker: trackers.first, subject: 'E2E search issue',
+                               author: User.current, priority: IssuePriority.default || IssuePriority.first,
+                               status: trackers.first.default_status,
+                               description: 'Vidsearch secret alpha, written before the change.')
+  search_issue.reload.init_journal(User.current)
+  search_issue.update!(description: 'Vidsearch secret omega, written after the change.')
 end
 
 Setting.webhooks_enabled = '1' if Setting.respond_to?(:webhooks_enabled=)
