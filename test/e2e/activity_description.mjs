@@ -17,19 +17,23 @@ await t.shot('admin-global', 'Admin: the new issue in the global activity, with 
 await t.login('manager');
 await t.go(`/projects/${P}/activity?show_issues=1&from=${from}`);
 if (!(await event()) || !(await description())) t.problems.push('manager: event or description missing');
-await t.shot('manager-project', 'Manager (view_issue_description): event with description');
+if (!(await t.page.locator('dd span.description', { hasText: 'A note from the manager.' }).count())) t.problems.push('manager: note missing');
+await t.shot('manager-project', 'Manager (view_issue_description): events with description and notes');
 
 await t.login('reader');
 await t.go(`/projects/${P}/activity?show_issues=1&from=${from}`);
 if (!(await event())) t.problems.push('reader: the event is gone');
 if (await description()) t.problems.push('reader: description shown');
-await t.shot('reader-project', 'reader (view_activities, no view_issue_description): the event stays, without the description');
+// Round 3 (2026-10-07): the notes of an issue reader may not open are left out too.
+if (!(await t.page.locator('dt.issue-note').count())) t.problems.push('reader: the update event is gone');
+if (await t.page.locator('dd span.description', { hasText: 'A note from the manager.' }).count()) t.problems.push('reader: note shown');
+await t.shot('reader-project', 'reader (view_activities, no view_issue_description): the events stay, without description and notes');
 const atom = await t.page.request.get(`${t.BASE}/projects/${P}/activity.atom?show_issues=1`);
 const body = await atom.text();
-if (atom.status() !== 200 || !body.includes('E2E search issue') || body.includes('Vidsearch secret')) t.problems.push('reader: Atom feed wrong');
+if (atom.status() !== 200 || !body.includes('E2E search issue') || body.includes('Vidsearch secret') || body.includes('A note from the manager.')) t.problems.push('reader: Atom feed wrong');
 await showApi(t, 'reader: project activity Atom feed', `GET /projects/${P}/activity.atom?show_issues=1`, atom.status(),
-  body.split('<entry>').filter(e => e.includes('E2E search issue')).join('\n<entry>') || body.slice(0, 1500));
-await t.shot('reader-atom', 'Atom feed: the entry of the issue has no description');
+  body.split('<entry>').filter(e => e.includes('E2E search issue') || e.includes('E2E assigned issue')).join('\n<entry>') || body.slice(0, 1500));
+await t.shot('reader-atom', 'Atom feed: the entries of issues reader may not open have no description and no note');
 
 await t.login('reporter');
 await t.go(`/projects/${P}/activity`, { status: 403 });
