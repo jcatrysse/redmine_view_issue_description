@@ -86,7 +86,7 @@ In this order: things that break, security, the GEOxyz changes, the open items, 
 
 **After Jan's decisions (session 2026-10-07)**
 
-13. **`alias_method` vs `prepend`** (general decision): this plugin patches with `alias_method` `Issue#visible?`, `#valid_watcher?`, `Issue.visible_condition`, `Query#columns`, `#available_block_columns`, `#has_column?`, `ActivitiesController#index` and `WatchersController#users_for_new_watcher` (`addable_watcher_users` no longer exists in 7.0). Checked against every GEOxyz plugin on `redmine70-migration` (agile, checklists, contacts, contacts_helpdesk, people, tags, zenedit, ai_triage and 30 public ones): none of them patches any of these methods (helpdesk's `visible_condition` is on `HelpdeskTicket`, contacts' on `Contact`), so nothing mixes `alias_method` and `prepend` on one method and the rule asks no change. Everything new in this session is `prepend` (or a `before_action`). Project > Settings, the issue list and an issue page with all plugins installed: see "Results".
+13. **`alias_method` vs `prepend`** (general decision): this plugin patches with `alias_method` `Issue#visible?`, `#valid_watcher?`, `Issue.visible_condition`, `Query#columns`, `#available_block_columns`, `#has_column?`, `ActivitiesController#index` and `WatchersController#users_for_new_watcher` (`addable_watcher_users` no longer exists in 7.0). Checked against every GEOxyz plugin on `redmine70-migration` (agile, checklists, contacts, contacts_helpdesk, people, tags, zenedit, ai_triage and 30 public ones): none of them patches any of these methods (helpdesk's `visible_condition` is on `HelpdeskTicket`, contacts' on `Contact`), so nothing mixed `alias_method` and `prepend` on one method. 2026-10-08, after the coordinator's run with all 43 plugins (load-order fragile, Jan: prepend for all plugins): every chain is now a named prepend module built by `RedmineViewIssueDescription::PrependChain.wrap` (666e19d); the `*_with_vid` logic and the specs are unchanged, `*_without_vid` calls the next method after the plugin's module, and `test/unit/core_patch_chain_test.rb` (8 of 10 fail on the alias code) checks every chain and that a later prepend or alias on `Issue#visible?` does not recurse. No `alias_method` is left in `lib/`. Project > Settings, the issue list and an issue page with all plugins installed: see "Results".
 14. **q3, remaining description leaks** (Jan: A, fix in a follow-up, at least search). Measured on the old code, each with a test that fails there, then closed one commit each:
     - search `/search`, `/search.json`: showed the description and matched on it (6a7f28e, `search_description_test.rb`, 5 of 8 fail without);
     - activity, project and global, HTML and Atom: description of new issues (bf0b6f6, `activity_description_test.rb`, 3 of 5);
@@ -104,7 +104,7 @@ In this order: things that break, security, the GEOxyz changes, the open items, 
     - mails `issue_add` / `issue_edit`: notes, "File ... added" details and the attachment list are hidden for that recipient while the mail is rendered; the mail is still sent (a922545, `mailer_notes_attachments_test.rb`, 2 of 4 fail without; `mailer_description_test.rb` now expects the note hidden, which reverses what it recorded under q3). Core's mailer_test: 3 more failures where the recipient lacks view_issue_description and the expected links sit in the notes.
     - activity (project, global, Atom): notes of issue updates hidden, the event stays (111b36b, `activity_notes_test.rb`, 2 of 4 fail without). Attachment names do not appear in the activity stream (core's journal provider lists notes and status changes only).
     - e2e: `mail_description.mjs` (update with note and attachment: reader gets the mail without both, scoped with both) and `activity_description.mjs` (reader sees the update events without notes, manager with), on both servers.
-    - Not in this decision: search still matches on notes (shows no description); left as is.
+    - Search still matches on notes (shows neither notes nor description): Jan decided "Nee, zo laten" (round 3, viewdesc 6, 04c4aee). Nothing to build.
 
 ## GEOxyz changes to review or re-apply
 
@@ -335,7 +335,6 @@ Decisions for this plugin:
 
 ## Left for Jan (2026-10-07)
 
-- Search still finds an issue through a word in its notes (it shows neither notes nor description). Not part of round 3; a follow-up if wanted.
 - Finding 16 belongs to redmine_issue_field_visibility (switch its `IssueQuery#initialize_available_filters` patch to `prepend`); until then the issue list answers 500 with redmine_agile installed next to it.
 - Before going live: run the role check of "After the upgrade" on production before and after, and compare.
 
