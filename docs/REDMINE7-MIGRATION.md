@@ -300,6 +300,8 @@ No settings page, routes of its own, incoming mail handling, rake tasks or cron 
 | **2026-10-07** same, with 37 other GEOxyz plugins (redmine_issue_field_visibility in, redmine_agile out) | | 62 runs, 287 assertions, 0 failures, 0 skips | |
 | **2026-10-07 round 3** plugin alone | 124 examples, 0 failures | 71 runs, 326 assertions, 0 failures, 5 skips | mail_description, activity_description: 0 problems |
 | **2026-10-07 round 3** with 37 other GEOxyz plugins | | 71 runs, 339 assertions, 0 failures, 0 skips | mail_description (6), activity_description (6), core_pages (10): 0 problems (`docs/e2e/`) |
+| **2026-10-08 prepend** plugin alone | 124 examples, 0 failures | 81 runs, 360 assertions, 0 failures, 5 skips | 18 scripts, 109 screenshots, 0 problems |
+| **2026-10-08 prepend** with 37 other GEOxyz plugins | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 18 scripts, 112 screenshots, 0 problems (`docs/e2e/`, looked at) |
 | **2026-10-07** all 38 GEOxyz plugins | | | not runnable: SystemStackError between redmine_issue_field_visibility and redmine_agile, also without this plugin (finding 16) |
 
 Boot and eager load: the production server (eager loading) started on every run; plugin migrations: none (nothing to run down/up). Smoke lists 2 plugin GET routes now (activities); show/edit are no longer method overrides.

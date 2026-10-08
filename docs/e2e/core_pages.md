@@ -1,6 +1,6 @@
 # core_pages
 
-Run 2026-10-07T21:53:42.797Z against http://127.0.0.1:3001.
+Run 2026-10-08T05:33:46.716Z against http://127.0.0.1:3001.
 
 | screenshot | user | URL | shows |
 |---|---|---|---|

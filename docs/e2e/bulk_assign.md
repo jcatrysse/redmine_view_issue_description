@@ -1,6 +1,6 @@
 # bulk_assign
 
-Run 2026-10-07T20:25:18.793Z against http://127.0.0.1:3001.
+Run 2026-10-08T05:31:35.704Z against http://127.0.0.1:3001.
 
 | screenshot | user | URL | shows |
 |---|---|---|---|
