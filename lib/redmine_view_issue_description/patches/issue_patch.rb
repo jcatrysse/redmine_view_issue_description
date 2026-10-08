@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 require_dependency 'issue'
+require_relative '../prepend_chain'
 
 module RedmineViewIssueDescription
   module Patches
@@ -286,27 +287,23 @@ module RedmineViewIssueDescription
 end
 
 Issue.include(RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods)
-Issue.class_eval do
-  unless instance_methods.include?(:visible_without_vid?)
-    alias_method :visible_without_vid?, :visible?
-    alias_method :visible?, :visible_with_vid?
-  end
-
-  if instance_methods.include?(:addable_watcher_users) && !instance_methods.include?(:addable_watcher_users_without_vid)
-    alias_method :addable_watcher_users_without_vid, :addable_watcher_users
-    alias_method :addable_watcher_users, :addable_watcher_users_with_vid
-  end
-
-  if instance_methods.include?(:valid_watcher?) && !instance_methods.include?(:valid_watcher_without_vid?)
-    alias_method :valid_watcher_without_vid?, :valid_watcher?
-    alias_method :valid_watcher?, :valid_watcher_with_vid?
-  end
+# prepend, not alias_method (Jan, 2026-10-07): see PrependChain.
+RedmineViewIssueDescription::PrependChain.wrap(Issue, :IssueVisible, :visible?,
+                                               with: :visible_with_vid?, without: :visible_without_vid?)
+# addable_watcher_users is gone from Redmine 7 core; wrapped only where it exists.
+if Issue.method_defined?(:addable_watcher_users)
+  RedmineViewIssueDescription::PrependChain.wrap(Issue, :IssueAddableWatcherUsers, :addable_watcher_users,
+                                                 with: :addable_watcher_users_with_vid,
+                                                 without: :addable_watcher_users_without_vid)
+end
+if Issue.method_defined?(:valid_watcher?)
+  RedmineViewIssueDescription::PrependChain.wrap(Issue, :IssueValidWatcher, :valid_watcher?,
+                                                 with: :valid_watcher_with_vid?, without: :valid_watcher_without_vid?)
 end
 
 Issue.singleton_class.include(RedmineViewIssueDescription::Patches::IssuePatch::ClassMethods)
-Issue.singleton_class.class_eval do
-  if method_defined?(:visible_condition) && !method_defined?(:visible_condition_without_vid)
-    alias_method :visible_condition_without_vid, :visible_condition
-    alias_method :visible_condition, :visible_condition_with_vid
-  end
+if Issue.singleton_class.method_defined?(:visible_condition)
+  RedmineViewIssueDescription::PrependChain.wrap(Issue.singleton_class, :IssueVisibleCondition, :visible_condition,
+                                                 with: :visible_condition_with_vid,
+                                                 without: :visible_condition_without_vid)
 end

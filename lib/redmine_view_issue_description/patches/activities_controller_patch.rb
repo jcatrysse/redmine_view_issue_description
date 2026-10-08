@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require_relative '../prepend_chain'
 
 module RedmineViewIssueDescription
   module Patches
@@ -26,9 +27,6 @@ module RedmineViewIssueDescription
 end
 
 ActivitiesController.include(RedmineViewIssueDescription::Patches::ActivitiesControllerPatch::InstanceMethods)
-ActivitiesController.class_eval do
-  unless method_defined?(:index_without_vid)
-    alias_method :index_without_vid, :index
-    alias_method :index, :index_with_vid
-  end
-end
+# prepend, not alias_method (Jan, 2026-10-07): see PrependChain.
+RedmineViewIssueDescription::PrependChain.wrap(ActivitiesController, :ActivitiesIndex, :index,
+                                               with: :index_with_vid, without: :index_without_vid)

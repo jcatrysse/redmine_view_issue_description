@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 require_dependency 'watchers_controller'
 require 'redmine/pagination'
+require_relative '../prepend_chain'
 
 module RedmineViewIssueDescription
   module Patches
@@ -15,12 +16,12 @@ module RedmineViewIssueDescription
           helper_method :watcher_pagination_link_params
 
           before_action :check_self_watch_permission, only: [:create, :watch]
-
-          private
-
-          alias_method :users_for_new_watcher_without_vid, :users_for_new_watcher
-          alias_method :users_for_new_watcher, :users_for_new_watcher_with_vid
         end
+
+        # prepend, not alias_method (Jan, 2026-10-07): see PrependChain.
+        RedmineViewIssueDescription::PrependChain.wrap(base, :WatchersUsersForNewWatcher, :users_for_new_watcher,
+                                                       with: :users_for_new_watcher_with_vid,
+                                                       without: :users_for_new_watcher_without_vid)
       end
 
       private

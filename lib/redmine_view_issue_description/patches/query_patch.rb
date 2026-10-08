@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 require_dependency 'query'
+require_relative '../prepend_chain'
 
 module RedmineViewIssueDescription
   module Patches
@@ -73,19 +74,11 @@ module RedmineViewIssueDescription
 end
 
 Query.include(RedmineViewIssueDescription::Patches::QueryPatch::InstanceMethods)
-Query.class_eval do
-  unless method_defined?(:columns_without_ifv)
-    alias_method :columns_without_ifv, :columns
-    alias_method :columns, :columns_with_ifv
-  end
-
-  unless method_defined?(:available_block_columns_without_ifv)
-    alias_method :available_block_columns_without_ifv, :available_block_columns
-    alias_method :available_block_columns, :available_block_columns_with_ifv
-  end
-
-  unless method_defined?(:has_column_without_ifv?)
-    alias_method :has_column_without_ifv?, :has_column?
-    alias_method :has_column?, :has_column_with_ifv?
-  end
-end
+# prepend, not alias_method (Jan, 2026-10-07): see PrependChain.
+RedmineViewIssueDescription::PrependChain.wrap(Query, :QueryColumns, :columns,
+                                               with: :columns_with_ifv, without: :columns_without_ifv)
+RedmineViewIssueDescription::PrependChain.wrap(Query, :QueryAvailableBlockColumns, :available_block_columns,
+                                               with: :available_block_columns_with_ifv,
+                                               without: :available_block_columns_without_ifv)
+RedmineViewIssueDescription::PrependChain.wrap(Query, :QueryHasColumn, :has_column?,
+                                               with: :has_column_with_ifv?, without: :has_column_without_ifv?)
