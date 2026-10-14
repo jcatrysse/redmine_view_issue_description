@@ -304,6 +304,7 @@ No settings page, routes of its own, incoming mail handling, rake tasks or cron 
 | **2026-10-08 prepend** with 37 other GEOxyz plugins | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 18 scripts, 112 screenshots, 0 problems (`docs/e2e/`, looked at) |
 | **2026-10-14** 7.0-stable-GEOxyz @ 1d8c2a3 (rebased upstream since 1bf0ef6), PostgreSQL 16, plugin @ d41bbb1, alone | 124 examples, 0 failures | 81 runs, 360 assertions, 0 failures, 5 skips (helpdesk absent) | 19 scripts (smoke, core, 17 scenarios), 109 screenshots, 0 problems (helpdesk_api n/a); not committed, docs/e2e keeps the 37-plugin run of 2026-10-08 |
 | **2026-10-14** same, with redmine_contacts @ d3eb8e0 and redmine_contacts_helpdesk @ 7d87a60 | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 19 scripts, 112 screenshots, 0 problems; a run with all GEOxyz plugins on 1d8c2a3 is left to the coordinator (see "Left for Jan") |
+| **2026-10-14** coordinator, 44 GEOxyz plugins on their `redmine70-migration` heads (this plugin e0f1806; heads in commit 700d703), 7.0-stable-GEOxyz @ 1d8c2a3, PostgreSQL 16, production mode | 124 examples, 0 failures | 81 runs, 0 failures | 18 scripts (smoke, core, 16 scenarios), 112 screenshots, 0 problems (`docs/e2e/`, the committed evidence since 700d703; screenshots checked here); as admin Project > Settings, the issue list and `/issues/1` answer 200 |
 | **2026-10-07** all 38 GEOxyz plugins | | | not runnable: SystemStackError between redmine_issue_field_visibility and redmine_agile, also without this plugin (finding 16) |
 
 Boot and eager load: the production server (eager loading) started on every run; plugin migrations: none (nothing to run down/up). Smoke lists 2 plugin GET routes now (activities); show/edit are no longer method overrides.
@@ -337,11 +338,16 @@ Decisions for this plugin:
 3. **q3 Remaining description leaks (search, activity, mails)**: A, "Oplossen in een vervolgwijziging, minstens zoeken" (Sluit het lek met eigen tests, maar vraagt extra werk na de migratie.). Built on this branch, see work list 14.
 4. **q4 MariaDB 10.11 in production?**: C, "Geen MariaDB 10.11 in productie: niets doen" (Geldt als productie PostgreSQL draait of het script op de productieserver gewoon issues teruggeeft.). Nothing to do: production runs PostgreSQL 16. Finding 9 stays as a note; the MariaDB line under "After the upgrade" is removed.
 
+## Notes from the combined run (2026-10-14)
+
+- Harness finding H6 (shared kit): `start_server.sh` wrote the e2e mail delivery under `default:`, which also switched the test environment to file delivery. Fixed in this repo (commit after 700d703): written for `$RMP_SERVER_ENV` only.
+- Intended behaviour of this plugin, confirmed by the coordinator: these suites fail only because their test roles lack `view_issue_description` (passing with this plugin moved aside): custom_workflows 4, editauthor 5, issue_view_columns 2, inline_edit_issues 1, paste_as_wiki_tables 1, custom_field_sql 1, contacts_helpdesk 16, checklists 9, issue_field_visibility 12, issue_todo_lists2 10, redmineup_tags 5, agile 2, context_menu_actions 1, and issue_recurring once its own fixture problem is fixed. Their sessions grant the permission in their test setup; nothing to change here.
+
 ## Left for Jan (2026-10-07)
 
 - Finding 16 belongs to redmine_issue_field_visibility (switch its `IssueQuery#initialize_available_filters` patch to `prepend`); until then the issue list answers 500 with redmine_agile installed next to it.
 - Before going live: run the role check of "After the upgrade" on production before and after, and compare.
-- 2026-10-14: 7.0-stable-GEOxyz was rebased upstream (now 1d8c2a3) and the shared-gems Gemfile (bb1f0e5) came after the last run with all GEOxyz plugins (2026-10-08). This plugin is green on 1d8c2a3 alone and with contacts + helpdesk; the run with every GEOxyz plugin (coordinator's harness, which has all checkouts) is still to be repeated on 1d8c2a3, refreshing `docs/e2e/`.
+- 2026-10-14: the run with every GEOxyz plugin on 1d8c2a3 is done (coordinator, see Results); nothing left for this plugin from it.
 
 ## Analysis report (2026-10-06, Dutch)
 
