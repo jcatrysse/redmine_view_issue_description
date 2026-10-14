@@ -74,16 +74,22 @@ if [ "$adapter" = mysql2 ] && command -v mysql >/dev/null 2>&1; then
     mysql -h "$host" -P "$port" -uroot -p"$password" -e "$grant" 2>/dev/null || true
 fi
 
-if [ ! -f "$REDMINE_DIR/config/configuration.yml" ]; then
+# Only for the server environment: a "default:" section would also switch the test
+# environment to file delivery, and tests that read ActionMailer::Base.deliveries
+# would then fail in this checkout. A file this script wrote earlier is rewritten.
+conf="$REDMINE_DIR/config/configuration.yml"
+if [ ! -f "$conf" ] || grep -q "mail goes to tmp/mails (start_server.sh)" "$conf" ||
+   { grep -q "^default:" "$conf" && grep -q "location: $REDMINE_DIR/tmp/mails" "$conf"; }; then
   mkdir -p "$REDMINE_DIR/tmp/mails"
-  cat > "$REDMINE_DIR/config/configuration.yml" <<YAML
-default:
+  cat > "$conf" <<YAML
+# mail goes to tmp/mails (start_server.sh)
+$RMP_SERVER_ENV:
   email_delivery:
     delivery_method: :file
     file_settings:
       location: $REDMINE_DIR/tmp/mails
 YAML
-  echo "config/configuration.yml: mail goes to tmp/mails"
+  echo "config/configuration.yml: mail of the $RMP_SERVER_ENV server goes to tmp/mails"
 fi
 
 [ -f "$REDMINE_DIR/config/initializers/secret_token.rb" ] || run bundle exec rake generate_secret_token
