@@ -1,6 +1,6 @@
 # journal_description
 
-Run 2026-10-08T05:39:54.170Z against http://127.0.0.1:3001.
+Run 2026-10-14T17:37:20.370Z against http://127.0.0.1:3000.
 
 | screenshot | user | URL | shows |
 |---|---|---|---|
