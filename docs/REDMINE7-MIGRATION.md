@@ -22,7 +22,7 @@ what is left. Written 2026-10-06 from a measured analysis (report at the bottom)
 | Upstream sync | NIET NODIG |
 | After sync | n.v.t. |
 | Complexity (1 trivial .. 5 rewrite) | 2 |
-| Measured on | Redmine 7.0-stable-GEOxyz @ 1bf0ef6 (2026-10-07), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16.15 (earlier runs also MariaDB 10.11.14 and 5.1-stable, no longer required) |
+| Measured on | Redmine 7.0-stable-GEOxyz @ 1d8c2a3 (2026-10-14; earlier 1bf0ef6), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16.15 (earlier runs also MariaDB 10.11.14 and 5.1-stable, no longer required) |
 | Migration session | 2026-10-06, done: every work list item fixed or answered, tests and e2e green, OpenAI review without open findings |
 | Decisions session | 2026-10-07: Jan's decisions recorded and carried out (q3 built: search, activity, mails, diff/quote/copy, bulk self-assignment); upgrade safety decided (no granting migration, finding 15); tests and e2e green on PostgreSQL alone and with the other GEOxyz plugins; OpenAI review without findings |
 | Plugin version | 0.3.0 |
@@ -302,6 +302,8 @@ No settings page, routes of its own, incoming mail handling, rake tasks or cron 
 | **2026-10-07 round 3** with 37 other GEOxyz plugins | | 71 runs, 339 assertions, 0 failures, 0 skips | mail_description (6), activity_description (6), core_pages (10): 0 problems (`docs/e2e/`) |
 | **2026-10-08 prepend** plugin alone | 124 examples, 0 failures | 81 runs, 360 assertions, 0 failures, 5 skips | 18 scripts, 109 screenshots, 0 problems |
 | **2026-10-08 prepend** with 37 other GEOxyz plugins | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 18 scripts, 112 screenshots, 0 problems (`docs/e2e/`, looked at) |
+| **2026-10-14** 7.0-stable-GEOxyz @ 1d8c2a3 (rebased upstream since 1bf0ef6), PostgreSQL 16, plugin @ d41bbb1, alone | 124 examples, 0 failures | 81 runs, 360 assertions, 0 failures, 5 skips (helpdesk absent) | 19 scripts (smoke, core, 17 scenarios), 109 screenshots, 0 problems (helpdesk_api n/a); not committed, docs/e2e keeps the 37-plugin run of 2026-10-08 |
+| **2026-10-14** same, with redmine_contacts @ d3eb8e0 and redmine_contacts_helpdesk @ 7d87a60 | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 19 scripts, 112 screenshots, 0 problems; a run with all GEOxyz plugins on 1d8c2a3 is left to the coordinator (see "Left for Jan") |
 | **2026-10-07** all 38 GEOxyz plugins | | | not runnable: SystemStackError between redmine_issue_field_visibility and redmine_agile, also without this plugin (finding 16) |
 
 Boot and eager load: the production server (eager loading) started on every run; plugin migrations: none (nothing to run down/up). Smoke lists 2 plugin GET routes now (activities); show/edit are no longer method overrides.
@@ -339,6 +341,7 @@ Decisions for this plugin:
 
 - Finding 16 belongs to redmine_issue_field_visibility (switch its `IssueQuery#initialize_available_filters` patch to `prepend`); until then the issue list answers 500 with redmine_agile installed next to it.
 - Before going live: run the role check of "After the upgrade" on production before and after, and compare.
+- 2026-10-14: 7.0-stable-GEOxyz was rebased upstream (now 1d8c2a3) and the shared-gems Gemfile (bb1f0e5) came after the last run with all GEOxyz plugins (2026-10-08). This plugin is green on 1d8c2a3 alone and with contacts + helpdesk; the run with every GEOxyz plugin (coordinator's harness, which has all checkouts) is still to be repeated on 1d8c2a3, refreshing `docs/e2e/`.
 
 ## Analysis report (2026-10-06, Dutch)
 
