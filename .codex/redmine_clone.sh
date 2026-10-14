@@ -21,7 +21,8 @@ if [ ! -d "$REDMINE_DIR/.git" ]; then
 else
   (
     cd "$REDMINE_DIR"
-    git fetch --depth 1 origin "$REDMINE_VERSION:refs/remotes/origin/$REDMINE_VERSION"
+    # "+": the GEOxyz branch is rebased upstream from time to time; follow it.
+    git fetch --depth 1 origin "+$REDMINE_VERSION:refs/remotes/origin/$REDMINE_VERSION"
     git checkout -B "$REDMINE_VERSION" "origin/$REDMINE_VERSION"
   )
 fi
