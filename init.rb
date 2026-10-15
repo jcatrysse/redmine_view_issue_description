@@ -37,6 +37,7 @@ require 'deface'
 
 Rails.application.config.after_initialize do
   require_relative 'lib/redmine_view_issue_description/hooks'
+  require_relative 'lib/redmine_view_issue_description/watched_clause_cache'
   require_relative 'lib/redmine_view_issue_description/patches/issue_patch'
   require_relative 'lib/redmine_view_issue_description/patches/query_patch'
   require_relative 'lib/redmine_view_issue_description/patches/issue_query_patch'

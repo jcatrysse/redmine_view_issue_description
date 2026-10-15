@@ -188,43 +188,15 @@ module RedmineViewIssueDescription
 
           return base_condition unless user&.logged?
 
-          # Avoid stale process-level cache: tracker IDs are queried fresh each call.
-          # The query is cheap (typically < 20 rows) and Redmine has query caching.
-          tracker_ids = Tracker.respond_to?(:pluck) ? Tracker.pluck(:id) : Tracker.all.map(&:id)
-          watched_clauses = []
           scoped_project_ids = vid_scoped_project_ids(options)
-
-          memberships = user.respond_to?(:memberships) ? Array(user.memberships) : []
-          memberships.each do |membership|
-            project = membership.respond_to?(:project) ? membership.project : nil
-            roles   = membership.respond_to?(:roles)   ? membership.roles   : []
-
-            next unless project
-
-            # The caller's project restriction lives inside base_condition (core keeps it
-            # in Project.allowed_to_condition's base_statement), and the watched part is
-            # OR'ed outside of it. Re-apply the restriction here or project-scoped callers
-            # such as the project activity tab would also see watched issues from every
-            # other project the user is a member of.
-            next if scoped_project_ids && !scoped_project_ids.include?(project.id.to_i)
-
-            # view_watched_issues: only lets the user see issues they are actually watching
-            if user.allowed_to?(:view_watched_issues, project)
-              project_id = project.id.to_i
-              if roles.any? { |role| role.permissions_all_trackers?(:view_watched_issues) }
-                watched_clauses << "#{Issue.table_name}.project_id = #{project_id}"
-              else
-                allowed = tracker_ids.select do |tid|
-                  roles.any? { |role| role.permissions_tracker_ids?(:view_watched_issues, tid) }
-                end
-                unless allowed.empty?
-                  watched_clauses << "(#{Issue.table_name}.project_id = #{project_id} AND #{Issue.table_name}.tracker_id IN (#{allowed.join(',')}))"
-                end
+          watched_clauses =
+            if defined?(RedmineViewIssueDescription::WatchedClauseCache)
+              RedmineViewIssueDescription::WatchedClauseCache.fetch([user.id, scoped_project_ids]) do
+                vid_watched_clauses(user, scoped_project_ids)
               end
+            else
+              vid_watched_clauses(user, scoped_project_ids)
             end
-          end
-
-          watched_clauses.uniq!
           return base_condition if watched_clauses.empty?
 
           user_id = user.id.to_i
@@ -252,6 +224,69 @@ module RedmineViewIssueDescription
         end
 
         private
+
+        # The per-project part of the watched condition: one clause per membership
+        # whose roles grant view_watched_issues (all trackers, or the listed ones).
+        def vid_watched_clauses(user, scoped_project_ids)
+          # Tracker ids are read once per call; the result is memoized per request
+          # (WatchedClauseCache), not per process, so a new tracker is seen at once.
+          tracker_ids = Tracker.respond_to?(:pluck) ? Tracker.pluck(:id) : Tracker.all.map(&:id)
+          watched_clauses = []
+
+          # Load the user's own memberships with their roles, projects and enabled
+          # modules in one query each: user.allowed_to? below then reads them from
+          # memory instead of querying per membership.
+          if defined?(ActiveRecord::Base) && user.is_a?(ActiveRecord::Base) && user.class.reflect_on_association(:memberships)
+            ActiveRecord::Associations::Preloader.new(
+              records: [user], associations: { memberships: [:roles, { project: :enabled_modules }] }
+            ).call
+          end
+          memberships = user.respond_to?(:memberships) ? Array(user.memberships) : []
+          memberships.each do |membership|
+            project = membership.respond_to?(:project) ? membership.project : nil
+            roles   = membership.respond_to?(:roles)   ? membership.roles   : []
+
+            next unless project
+
+            # The caller's project restriction lives inside base_condition (core keeps it
+            # in Project.allowed_to_condition's base_statement), and the watched part is
+            # OR'ed outside of it. Re-apply the restriction here or project-scoped callers
+            # such as the project activity tab would also see watched issues from every
+            # other project the user is a member of.
+            next if scoped_project_ids && !scoped_project_ids.include?(project.id.to_i)
+
+            # view_watched_issues: only lets the user see issues they are actually watching
+            if vid_allowed_in_membership?(user, :view_watched_issues, project, roles)
+              project_id = project.id.to_i
+              if roles.any? { |role| role.permissions_all_trackers?(:view_watched_issues) }
+                watched_clauses << "#{Issue.table_name}.project_id = #{project_id}"
+              else
+                allowed = tracker_ids.select do |tid|
+                  roles.any? { |role| role.permissions_tracker_ids?(:view_watched_issues, tid) }
+                end
+                unless allowed.empty?
+                  watched_clauses << "(#{Issue.table_name}.project_id = #{project_id} AND #{Issue.table_name}.tracker_id IN (#{allowed.join(',')}))"
+                end
+              end
+            end
+          end
+
+          watched_clauses.uniq
+        end
+
+        # user.allowed_to?(permission, project) for a project the user is a member
+        # of, read from the preloaded membership: core's User#membership queries
+        # the members table per project. Same rule as core: the project allows the
+        # permission (not archived, module enabled), admin, or a role of the
+        # membership grants it (member roles only on private projects). An OAuth
+        # sign-in narrows the roles by its scope, so core decides that case.
+        def vid_allowed_in_membership?(user, permission, project, roles)
+          return user.allowed_to?(permission, project) unless user.respond_to?(:authorized_by_oauth?) && !user.authorized_by_oauth?
+          return false unless project.allows_to?(permission)
+          return true if user.admin?
+
+          roles.any? { |role| (project.is_public? || role.member?) && role.allowed_to?(permission) }
+        end
 
         # Project ids the caller restricted the query to, or nil when the caller is
         # unscoped (global / cross-project). Mirrors what core does with
