@@ -73,4 +73,15 @@ class VisibleConditionCostTest < ActiveSupport::TestCase
     assert_equal first, cached
     assert_includes first, 'watchers'
   end
+
+  test 'a role given through a group counts, also when the group is joined in the same request' do
+    project = Project.generate!(enabled_module_names: %w[issue_tracking])
+    project.trackers = Tracker.all.to_a
+    group = Group.generate!
+    Member.create!(principal: group, project: project, roles: [@role])
+    assert_not_includes Issue.visible_condition(fresh_user), "project_id = #{project.id}"
+
+    group.users << @user # core adds an inherited membership for the user
+    assert_includes Issue.visible_condition(User.find(@user.id)), "project_id = #{project.id}"
+  end
 end
