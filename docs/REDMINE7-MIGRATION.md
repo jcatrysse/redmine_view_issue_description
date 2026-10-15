@@ -22,7 +22,7 @@ what is left. Written 2026-10-06 from a measured analysis (report at the bottom)
 | Upstream sync | NIET NODIG |
 | After sync | n.v.t. |
 | Complexity (1 trivial .. 5 rewrite) | 2 |
-| Measured on | Redmine 7.0-stable-GEOxyz @ 1d8c2a3 (2026-10-14; earlier 1bf0ef6), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16.15 (earlier runs also MariaDB 10.11.14 and 5.1-stable, no longer required) |
+| Measured on | Redmine 7.0-stable-GEOxyz @ 71b9479 (2026-10-15; earlier 1d8c2a3, 1bf0ef6), Rails 8.1.3.1, Ruby 3.3.6, PostgreSQL 16.15 (earlier runs also MariaDB 10.11.14 and 5.1-stable, no longer required) |
 | Migration session | 2026-10-06, done: every work list item fixed or answered, tests and e2e green, OpenAI review without open findings |
 | Decisions session | 2026-10-07: Jan's decisions recorded and carried out (q3 built: search, activity, mails, diff/quote/copy, bulk self-assignment); upgrade safety decided (no granting migration, finding 15); tests and e2e green on PostgreSQL alone and with the other GEOxyz plugins; OpenAI review without findings |
 | Plugin version | 0.3.0 |
@@ -305,6 +305,7 @@ No settings page, routes of its own, incoming mail handling, rake tasks or cron 
 | **2026-10-14** 7.0-stable-GEOxyz @ 1d8c2a3 (rebased upstream since 1bf0ef6), PostgreSQL 16, plugin @ d41bbb1, alone | 124 examples, 0 failures | 81 runs, 360 assertions, 0 failures, 5 skips (helpdesk absent) | 19 scripts (smoke, core, 17 scenarios), 109 screenshots, 0 problems (helpdesk_api n/a); not committed, docs/e2e keeps the 37-plugin run of 2026-10-08 |
 | **2026-10-14** same, with redmine_contacts @ d3eb8e0 and redmine_contacts_helpdesk @ 7d87a60 | 124 examples, 0 failures | 81 runs, 373 assertions, 0 failures, 0 skips | 19 scripts, 112 screenshots, 0 problems; a run with all GEOxyz plugins on 1d8c2a3 is left to the coordinator (see "Left for Jan") |
 | **2026-10-14** coordinator, 44 GEOxyz plugins on their `redmine70-migration` heads (this plugin e0f1806; heads in commit 700d703), 7.0-stable-GEOxyz @ 1d8c2a3, PostgreSQL 16, production mode | 124 examples, 0 failures | 81 runs, 0 failures | 18 scripts (smoke, core, 16 scenarios), 112 screenshots, 0 problems (`docs/e2e/`, the committed evidence since 700d703; screenshots checked here); as admin Project > Settings, the issue list and `/issues/1` answer 200 |
+| **2026-10-15 performance** 7.0-stable-GEOxyz @ 71b9479 (Rails 8.1.4), PostgreSQL 16, plugin alone | 124 examples, 0 failures | 89 runs, 383 assertions, 0 failures, 5 skips (helpdesk absent); with contacts + helpdesk 89 runs, 396 assertions, 0 failures | 19 scripts, 109 screenshots, 0 problems (not committed; docs/e2e keeps the 44-plugin run) |
 | **2026-10-07** all 38 GEOxyz plugins | | | not runnable: SystemStackError between redmine_issue_field_visibility and redmine_agile, also without this plugin (finding 16) |
 
 Boot and eager load: the production server (eager loading) started on every run; plugin migrations: none (nothing to run down/up). Smoke lists 2 plugin GET routes now (activities); show/edit are no longer method overrides.
@@ -337,6 +338,24 @@ Decisions for this plugin:
 2. **q2 Description in lists and the API for issues you may not open**: A, "Leeg ('null'), zelfde vorm als Redmine (gebouwd)" (Koppelingen die de API lezen zien hetzelfde veld, alleen leeg.). Already built (7f2e8b9, a397f23), kept.
 3. **q3 Remaining description leaks (search, activity, mails)**: A, "Oplossen in een vervolgwijziging, minstens zoeken" (Sluit het lek met eigen tests, maar vraagt extra werk na de migratie.). Built on this branch, see work list 14.
 4. **q4 MariaDB 10.11 in production?**: C, "Geen MariaDB 10.11 in productie: niets doen" (Geldt als productie PostgreSQL draait of het script op de productieserver gewoon issues teruggeeft.). Nothing to do: production runs PostgreSQL 16. Finding 9 stays as a note; the MariaDB line under "After the upgrade" is removed.
+
+## Performance (2026-10-15)
+
+Asked by the coordinator on Jan's request (the full plugin set must perform on Redmine 7). Measured with all 44 plugins (coordinator): this plugin cost search 478 ms, gantt 327 ms, issue lists 129 ms, issue page 106 ms, my page 77 ms and 50-60 queries on every page with issues.
+
+- `Issue.visible_condition` (10a6f14): the user's memberships are preloaded with roles, project and enabled modules, the permission check reads them (same rule as `User#allowed_to?`; OAuth sign-ins still go through core), and the watched clauses are memoized per request (`WatchedClauseCache`, `ActiveSupport::CurrentAttributes`), cleared on every save or destroy of a member, member role, role, enabled module, tracker or project. SQL unchanged. Test `test/unit/visible_condition_cost_test.rb`: same cost for 5 and 10 memberships (before 34 and 59 queries).
+- Search (e783fa2): the second pass is skipped when every result project gives the user a role with `view_issue_description` for all trackers and "all issues" visibility; Sets instead of `Array#include?`. Tests in `search_description_test.rb`.
+- Measured here, production mode, query cache off, user with 12 memberships, 5,000 issues with "vessel" (2,500 only in the description):
+
+  | | before (ed584b4) | after (e783fa2) |
+  |---|---|---|
+  | `visible_condition` 5 calls per page | 80 queries, 85 ms | 20 queries, 27 ms |
+  | search "vessel", user with full grant | 666 ms | 152 ms |
+  | search "vessel", user without `view_issue_description` (second pass) | 616 ms | 620 ms |
+
+  The last row is unchanged: there the cost is loading the 2,500 issues found only through their description to check each one (assignee, watcher). Left as is; a SQL-side check would duplicate `detail_access_granted?`.
+- OpenAI review `docs/reviews/openai-2026-10-15-e783fa2.md`: 3 findings, none applicable (group roles arrive as inherited member rows, proven by a test; Set is built in from Ruby 3.2).
+- The coordinator's 44-plugin measurement should be repeated on these commits to confirm the page savings.
 
 ## Notes from the combined run (2026-10-14)
 
