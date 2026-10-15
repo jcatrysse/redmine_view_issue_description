@@ -18,12 +18,16 @@ module RedmineViewIssueDescription
         return ranks_and_ids if ranks_and_ids.empty? || user.admin? ||
                                 options[:titles_only] || options[:attachments] == 'only'
 
+        # The second pass can only drop issues the user may not open; skip it when
+        # every project of the results shows the user every description.
+        return ranks_and_ids if vid_all_descriptions_open?(ranks_and_ids.map(&:last), user)
+
         without = vid_without_description { super }
-        found_without = without.map(&:last)
-        only_through_description = ranks_and_ids.map(&:last) - found_without
+        found_without = without.to_set(&:last)
+        only_through_description = ranks_and_ids.map(&:last).reject { |id| found_without.include?(id) }
         return ranks_and_ids if only_through_description.empty?
 
-        openable = vid_openable_ids(Issue.where(id: only_through_description).to_a, user)
+        openable = vid_openable_ids(Issue.where(id: only_through_description).to_a, user).to_set
         ranks_and_ids.select { |_, id| found_without.include?(id) || openable.include?(id) }
       end
 
@@ -46,6 +50,32 @@ module RedmineViewIssueDescription
       end
 
       private
+
+      # True when, in every project of the given issues, one role of the user
+      # grants view_issue_description for all trackers with "all issues"
+      # visibility: then the user may open each of them (Issue#detail_access_granted?)
+      # and nothing found through a description has to be dropped. Conservative:
+      # false sends the search through the second pass as before.
+      def vid_all_descriptions_open?(ids, user)
+        return false if user.respond_to?(:authorized_by_oauth?) && user.authorized_by_oauth?
+
+        project_ids = Issue.where(id: ids).distinct.pluck(:project_id)
+        ActiveRecord::Associations::Preloader.new(
+          records: [user], associations: { memberships: [:roles, { project: :enabled_modules }] }
+        ).call
+        memberships = user.memberships.index_by(&:project_id)
+
+        Project.where(id: project_ids).preload(:enabled_modules).all? do |project|
+          next false unless project.allows_to?(:view_issue_description)
+
+          membership = memberships[project.id]
+          roles = membership ? membership.roles.to_a : user.roles_for_project(project)
+          roles.any? do |role|
+            (project.is_public? || role.member?) && role.allowed_to?(:view_issue_description) &&
+              role.issues_visibility.to_s == 'all' && role.permissions_all_trackers?(:view_issue_description)
+          end
+        end
+      end
 
       def vid_without_description
         previous = Thread.current[:vid_search_without_description]

@@ -98,4 +98,47 @@ class SearchDescriptionTest < Redmine::IntegrationTest
     search_json('Vidsubject')
     assert_equal 'Vidsecret word in the description', @hidden.reload.description
   end
+
+  # Counts the second search pass (core's search again, without the description).
+  module SecondPassCounter
+    def vid_without_description
+      Thread.current[:vid_second_passes] = Thread.current[:vid_second_passes].to_i + 1
+      super
+    end
+  end
+  Issue.singleton_class.prepend(SecondPassCounter)
+
+  def second_passes
+    Thread.current[:vid_second_passes] = 0
+    yield
+    Thread.current[:vid_second_passes]
+  end
+
+  test 'one search pass when every result project shows the user every description' do
+    vid_grant(@role, :view_issue_description)
+    @role.update!(issues_visibility: 'all')
+
+    assert_equal 0, second_passes { search_json('Vidsecret') }
+    assert_includes search_json('Vidsecret').map { |r| r['id'] }, @hidden.id
+  end
+
+  test 'without the grant the second pass still runs' do
+    assert_equal 1, second_passes { search_json('Vidsecret') }
+  end
+
+  test 'a grant limited to own or default visibility still runs the second pass' do
+    vid_grant(@role, :view_issue_description) # Developer: issues_visibility 'default'
+    assert_equal 1, second_passes { search_json('Vidsecret') }
+  end
+
+  test 'a tracker-scoped grant still runs the second pass and still filters' do
+    vid_grant(@role, :view_issue_description)
+    @role.permissions_all_trackers = @role.permissions_all_trackers.merge('view_issue_description' => '0')
+    @role.permissions_tracker_ids = @role.permissions_tracker_ids.merge('view_issue_description' => ['2'])
+    @role.save!
+
+    ids = search_json('Vidsecret').map { |r| r['id'] }
+    assert_not_includes ids, @hidden.id
+    assert_includes ids, @assigned.id
+  end
 end
