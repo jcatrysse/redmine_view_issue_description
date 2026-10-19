@@ -356,6 +356,7 @@ Asked by the coordinator on Jan's request (the full plugin set must perform on R
   The last row is unchanged: there the cost is loading the 2,500 issues found only through their description to check each one (assignee, watcher). Left as is; a SQL-side check would duplicate `detail_access_granted?`.
 - OpenAI review `docs/reviews/openai-2026-10-15-e783fa2.md`: 3 findings, none applicable (group roles arrive as inherited member rows, proven by a test; Set is built in from Ruby 3.2).
 - The coordinator's 44-plugin measurement should be repeated on these commits to confirm the page savings.
+- 2026-10-19: the memo carried over between requests in functional tests (no Rails executor there), which made redmine_agile's board query-count tests differ by one memo computation (coordinator, 44-plugin run on 7310d11). Fixed: the memo is also cleared on `start_processing.action_controller`; test `test/functional/request_query_count_test.rb`. Specs 124/0, Rails tests 91 runs 0 failures (alone), e2e 0 problems.
 
 ## Notes from the combined run (2026-10-14)
 
