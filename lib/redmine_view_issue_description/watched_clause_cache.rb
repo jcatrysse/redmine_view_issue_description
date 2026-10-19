@@ -28,3 +28,15 @@ end
   model.after_save { RedmineViewIssueDescription::WatchedClauseCache.clear }
   model.after_destroy { RedmineViewIssueDescription::WatchedClauseCache.clear }
 end
+
+# Each controller request starts with an empty memo. Rails resets
+# CurrentAttributes around every request through its executor, but functional
+# tests (ActionController::TestCase) run requests without it, so the memo of one
+# request reached the next and query counts depended on what came before. The
+# notification fires for every controller, also those loaded before this file.
+unless defined?(RedmineViewIssueDescription::WATCHED_CLAUSE_CACHE_RESET)
+  RedmineViewIssueDescription::WATCHED_CLAUSE_CACHE_RESET =
+    ActiveSupport::Notifications.subscribe('start_processing.action_controller') do
+      RedmineViewIssueDescription::WatchedClauseCache.clear
+    end
+end
