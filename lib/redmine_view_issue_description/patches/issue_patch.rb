@@ -66,6 +66,19 @@ module RedmineViewIssueDescription
           false
         end
 
+        # True when the user may open this issue (its page, its API show and the
+        # payload of a Redmine 7 webhook). Same paths as
+        # IssuesController#vid_description_access?: admin, explicit
+        # view_issue_description grant, assignee, watcher with view_watched_issues.
+        def detail_access_granted?(user)
+          return false unless user
+          return true if user.admin?
+
+          description_access_granted?(user) ||
+            (!assigned_to.nil? && user.is_or_belongs_to?(assigned_to)) ||
+            watcher_access_granted?(user)
+        end
+
         def addable_watcher_users_with_vid(user = User.current)
           base = addable_watcher_users_without_vid(user)
           return base unless project

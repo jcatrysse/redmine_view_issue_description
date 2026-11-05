@@ -420,6 +420,104 @@ RSpec.describe RedmineViewIssueDescription::Patches::IssuePatch::InstanceMethods
     end
   end
 
+  describe '#detail_access_granted?' do
+    let(:description_role) { Role.new(all_tracker_permissions: [:view_issue_description]) }
+    let(:group) { double('Group') }
+
+    let(:admin) { User.new(name: 'admin', admin: true) }
+    let(:assignee) { User.new(name: 'assignee') }
+    let(:group_member) { User.new(name: 'group_member', groups: [group]) }
+    let(:watcher) do
+      User.new(
+        name: 'watcher',
+        project_roles: { project => [all_tracker_watch_role] },
+        permissions: { [:view_watched_issues, project] => true }
+      )
+    end
+    let(:watcher_without_permission) { User.new(name: 'watcher_without_permission') }
+    let(:description_user) do
+      User.new(
+        name: 'description_user',
+        project_roles: { project => [description_role] },
+        permissions: { [:view_issue_description, project] => true }
+      )
+    end
+    let(:outsider) { User.new(name: 'outsider', project_roles: { project => [Role.new] }) }
+    let(:anonymous) { User.new(name: 'anonymous', logged: false) }
+
+    def issue_with(assigned_to: nil, watchers: [])
+      Issue.new(project: project, tracker: tracker, assigned_to: assigned_to, watchers: watchers)
+    end
+
+    it 'denies access when no user is provided' do
+      expect(issue_with.detail_access_granted?(nil)).to be(false)
+    end
+
+    it 'grants access to admin' do
+      expect(issue_with.detail_access_granted?(admin)).to be(true)
+    end
+
+    it 'grants access to the assignee' do
+      expect(issue_with(assigned_to: assignee).detail_access_granted?(assignee)).to be(true)
+    end
+
+    it 'grants access to a member of the assigned group' do
+      expect(issue_with(assigned_to: group).detail_access_granted?(group_member)).to be(true)
+    end
+
+    it 'grants access to a watcher with view_watched_issues' do
+      expect(issue_with(watchers: [watcher]).detail_access_granted?(watcher)).to be(true)
+    end
+
+    it 'denies access to a watcher without view_watched_issues' do
+      issue = issue_with(watchers: [watcher_without_permission])
+
+      expect(issue.detail_access_granted?(watcher_without_permission)).to be(false)
+    end
+
+    it 'grants access with an explicit view_issue_description grant' do
+      expect(issue_with.detail_access_granted?(description_user)).to be(true)
+    end
+
+    it 'denies access to a user with none of the access paths' do
+      expect(issue_with(assigned_to: assignee, watchers: [watcher]).detail_access_granted?(outsider)).to be(false)
+    end
+
+    it 'gives the same answer as IssuesController#vid_description_access? for the same users' do
+      unless defined?(IssuesController)
+        class ::IssuesController
+          def show; end
+          def edit; end
+          def update; end
+
+          def self.after_action(*); end
+        end
+      end
+      require File.expand_path('../../../../lib/redmine_view_issue_description/patches/issues_controller_patch.rb', __dir__)
+
+      saved_user = User.current
+      issues = [
+        issue_with,
+        issue_with(assigned_to: assignee),
+        issue_with(assigned_to: group),
+        issue_with(watchers: [watcher, watcher_without_permission])
+      ]
+      users = [admin, assignee, group_member, watcher, watcher_without_permission, description_user, outsider, anonymous]
+
+      results = issues.product(users).map do |issue, user|
+        User.current = user
+        controller = IssuesController.allocate
+        controller.instance_variable_set(:@issue, issue)
+        [issue.detail_access_granted?(user), controller.send(:vid_description_access?)]
+      end
+
+      expect(results.map(&:first)).to eq(results.map(&:last))
+      expect(results.map(&:first)).to include(true, false)
+    ensure
+      User.current = saved_user
+    end
+  end
+
   describe '#addable_watcher_users_with_vid' do
     let(:project_users) { [] }
     let(:project) { double('Project', users: project_users, members: []) }
